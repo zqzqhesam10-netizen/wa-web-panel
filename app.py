@@ -23,6 +23,7 @@ def init_db():
         phone TEXT PRIMARY KEY
     )
     """)
+    # إضافة حقل sender لمعرفة من أرسل الرسالة (me أو them)
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,10 +50,7 @@ def send_message(phone, message):
         "type": "text",
         "text": {"body": message}
     }
-    try:
-        requests.post(url, headers=headers, json=data)
-    except Exception as e:
-        print(f"Error sending to {phone}: {e}")
+    requests.post(url, headers=headers, json=data)
 
 # ================= CHAT PAGE =================
 @app.route("/chat")
@@ -63,55 +61,6 @@ def chat():
     users = c.fetchall()
     conn.close()
     return render_template("chat.html", users=users)
-
-# ================= GET USERS (API) =================
-@app.route("/api/users")
-def get_users():
-    conn = db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users")
-    users = c.fetchall()
-    conn.close()
-    return jsonify({"users": [dict(u) for u in users]})
-
-# ================= ADD NEW USER MANUALLY =================
-@app.route("/api/add_user", methods=["POST"])
-def add_user():
-    phone = request.form.get("phone", "").strip()
-    if not phone:
-        return jsonify({"status": "error", "message": "الرقم مطلوب"}), 400
-    
-    conn = db()
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok", "phone": phone})
-
-# ================= BROADCAST MESSAGE (إرسال للجميع) =================
-@app.route("/api/broadcast", methods=["POST"])
-def broadcast():
-    message = request.form.get("message", "").strip()
-    if not message:
-        return jsonify({"status": "error", "message": "الرسالة فارغة"}), 400
-
-    conn = db()
-    c = conn.cursor()
-    c.execute("SELECT phone FROM users")
-    users = c.fetchall()
-
-    # إرسال الرسالة لكل مستخدم في قاعدة البيانات وحفظها في الشات الخاص به
-    for user in users:
-        phone = user["phone"]
-        send_message(phone, message)
-        c.execute("""
-        INSERT INTO messages (phone, message, sender)
-        VALUES (?, ?, 'me')
-        """, (phone, message))
-        
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok", "sent_count": len(users)})
 
 # ================= GET MESSAGES =================
 @app.route("/messages/<phone>")
@@ -133,11 +82,12 @@ def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
+    # إرسال واتساب
     send_message(phone, message)
 
     conn = db()
     c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+    # حفظ الرسالة مع تحديد أن المرسل هو أنا 'me'
     c.execute("""
     INSERT INTO messages (phone, message, sender)
     VALUES (?, ?, 'me')
@@ -164,10 +114,13 @@ def webhook():
         conn = db()
         c = conn.cursor()
         c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+        
+        # حفظ الرسالة القادمة وتحديد المرسل 'them'
         c.execute("""
         INSERT INTO messages (phone, message, sender)
         VALUES (?, ?, 'them')
         """, (phone, text))
+        
         conn.commit()
         conn.close()
     except:
