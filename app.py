@@ -41,7 +41,7 @@ def init_db():
 
 init_db()
 
-# ================= WHATSAPP SEND =================
+# ================= SEND WHATSAPP =================
 
 def send_message(phone, message):
 
@@ -62,12 +62,6 @@ def send_message(phone, message):
     }
 
     requests.post(url, headers=headers, json=data)
-
-# ================= HOME =================
-
-@app.route("/")
-def home():
-    return "WhatsApp Web Running 🚀"
 
 # ================= CHAT PAGE =================
 
@@ -104,7 +98,7 @@ def messages(phone):
 
     return jsonify({"messages": [dict(m) for m in msgs]})
 
-# ================= SEND MESSAGE =================
+# ================= SEND MESSAGE (FIXED) =================
 
 @app.route("/send", methods=["POST"])
 def send():
@@ -115,7 +109,6 @@ def send():
     # إرسال واتساب
     send_message(phone, message)
 
-    # حفظ
     conn = db()
     c = conn.cursor()
 
@@ -127,7 +120,8 @@ def send():
     conn.commit()
     conn.close()
 
-    return jsonify({"status": "ok"})
+    # مهم: رجّع JSON وليس صفحة
+    return jsonify({"status": "ok", "message": message})
 
 # ================= WEBHOOK =================
 
