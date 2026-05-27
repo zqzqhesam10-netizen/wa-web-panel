@@ -277,8 +277,23 @@ def home():
 
     conn.close()
 
+    
     return render_template("index.html", items=items)
+    
+    @app.route("/chat")
+def chat():
 
+    conn = db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM users")
+
+    users = c.fetchall()
+
+    conn.close()
+
+    return render_template("chat.html", users=users)
+    
     html = """
     <html>
     <head>
