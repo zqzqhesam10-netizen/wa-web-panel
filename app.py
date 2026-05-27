@@ -12,12 +12,28 @@ VERIFY_TOKEN = "mytoken123"
 
 # ================= DATABASE =================
 
-def db():
+def broadcast(title, category, image):
 
-    conn = sqlite3.connect("chat.db")
-    conn.row_factory = sqlite3.Row
+    conn = db()
+    c = conn.cursor()
 
-    return conn
+    c.execute("967780331040")
+    users = c.fetchall()
+
+    msg = f"""🔥 New Release
+
+🎬 {title}
+📺 {category}
+"""
+
+    # إرسال للجميع
+    for u in users:
+        send_message(u["phone"], msg, image)
+
+    # إرسال لك أنت
+    send_message(ADMIN_PHONE, "📢 تم إضافة محتوى جديد:\n" + title, image)
+
+    conn.close()
 
 # ================= INIT DB =================
 
