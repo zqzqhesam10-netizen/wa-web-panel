@@ -32,7 +32,7 @@
         /* صندوق الرسائل */
         .messages-container { flex: 1; overflow-y: auto; padding: 20px 5%; display: flex; flex-direction: column; gap: 8px; }
         .msg-row { display: flex; width: 100%; }
-        .msg-row.me { justify-content: flex-start; } /* تم التعديل لتتناسب مع الـ RTL */
+        .msg-row.me { justify-content: flex-start; } 
         .msg-row.them { justify-content: flex-end; }
         
         .bubble { max-width: 65%; padding: 8px 12px; border-radius: 8px; font-size: 14.5px; line-height: 1.4; position: relative; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); word-wrap: break-word; }
@@ -54,7 +54,7 @@
 </head>
 <body>
 
-    <!-- القائمة الجانبية -->
+    <!-- القائمة الجانبية لجهات الاتصال -->
     <div class="sidebar">
         <div class="sidebar-header">
             <div class="avatar"><i class="fas fa-user"></i></div>
@@ -64,12 +64,14 @@
         <div class="search-box">
             <div class="search-inner">
                 <i class="fas fa-search"></i>
-                <input type="text" placeholder="البحث أو بدء دردشة جديدة">
+                <input type="text" id="searchInput" placeholder="البحث أو بدء دردشة جديدة">
             </div>
         </div>
+        
+        <!-- سيتم ملء هذه القائمة تلقائياً بالكامل عبر الـ JavaScript وبدون تكرار -->
         <div class="user-list">
             {% for user in users %}
-            <div class="user-item" onclick="openChat('{{ user.phone }}', this)">
+            <div class="user-item {% if user.phone == currentPhone %}active{% endif %}" data-phone="{{ user.phone }}" onclick="openChat('{{ user.phone }}', this)">
                 <div class="avatar"><i class="fas fa-user-circle"></i></div>
                 <div class="user-info">
                     <div class="user-name">{{ user.phone }}</div>
@@ -80,7 +82,7 @@
         </div>
     </div>
 
-    <!-- منطقة الشات -->
+    <!-- منطقة الشات والمحادثة النشطة -->
     <div class="chat-area" id="chatArea" style="display: none;">
         <div class="chat-header">
             <div class="avatar" style="margin-left: 15px;"><i class="fas fa-user"></i></div>
@@ -91,7 +93,7 @@
         </div>
         
         <div class="messages-container" id="messagesContainer">
-            <!-- الرسائل تظهر هنا ديناميكياً -->
+            <!-- الرسائل تُحدث وتظهر هنا تلقائياً -->
         </div>
 
         <div class="input-area">
@@ -103,38 +105,76 @@
         </div>
     </div>
 
-    <!-- شاشة الترحيب البدائية -->
+    <!-- شاشة الترحيب قبل اختيار أي محادثة -->
     <div class="welcome-screen" id="welcomeScreen">
         <i class="fab fa-whatsapp"></i>
         <h2>واتساب ويب للمسؤول</h2>
-        <p>اختر أي جهة اتصال من القائمة الجانبية لبدء إرسال واستقبال الرسائل مباشرة.</p>
+        <p>أي شخص يرسل رسالة جديدة سيظهر هنا تلقائياً دون تكرار للرقم.</p>
     </div>
 
     <script>
         let currentPhone = "";
-        let intervalId = null;
+        let chatIntervalId = null;
+        let usersIntervalId = null;
 
+        // تشغيل مراقبة جهات الاتصال بمجرد فتح الصفحة
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchUsersList();
+            // تفقد السيرفر كل 5 ثوانٍ للتحقق مما إذا كان هناك أي رقم جديد قام بمراسلتنا وإضافته فوراً للقائمة
+            usersIntervalId = setInterval(fetchUsersList, 5000);
+        });
+
+        // دالة تحديث قائمة جهات الاتصال بشكل حي وتلقائي
+        function fetchUsersList() {
+            fetch('/api/users')
+                .then(res => res.json())
+                .then(data => {
+                    const userListContainer = document.querySelector('.user-list');
+                    let htmlContent = "";
+                    
+                    data.users.forEach(user => {
+                        const isActive = user.phone === currentPhone ? 'active' : '';
+                        htmlContent += `
+                            <div class="user-item ${isActive}" data-phone="${user.phone}" onclick="openChat('${user.phone}', this)">
+                                <div class="avatar"><i class="fas fa-user-circle"></i></div>
+                                <div class="user-info">
+                                    <div class="user-name">${user.phone}</div>
+                                    <div class="user-status">اضغط لعرض الرسائل...</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    userListContainer.innerHTML = htmlContent;
+                });
+        }
+
+        // دالة فتح صندوق المحادثة الخاص برقم معين
         function openChat(phone, element) {
             currentPhone = phone;
             document.getElementById('activePhone').value = phone;
             document.getElementById('currentChatUser').innerText = phone;
             
-            // إظهار واجهة الشات وإخفاء شاشة الترحيب
             document.getElementById('welcomeScreen').style.display = 'none';
             document.getElementById('chatArea').style.display = 'flex';
 
-            // تفعيل العنصر المختار في القائمة الجانبية
+            // تفعيل التحديد المرئي على جهة الاتصال الحالية
             document.querySelectorAll('.user-item').forEach(item => item.classList.remove('active'));
-            element.classList.add('active');
+            if(element) {
+                element.classList.add('active');
+            } else {
+                const target = document.querySelector(`.user-item[data-phone="${phone}"]`);
+                if(target) target.classList.add('active');
+            }
 
-            // جلب الرسائل فوراً
             fetchMessages();
 
-            // إعداد تحديث تلقائي حقيقي كل ثانيتين للرسائل الجديدة (مثل واتساب تماماً)
-            if(intervalId) clearInterval(intervalId);
-            intervalId = setInterval(fetchMessages, 2000);
+            // تحديث رسائل المحادثة المفتوحة حالياً كل ثانيتين تلقائياً
+            if(chatIntervalId) clearInterval(chatIntervalId);
+            chatIntervalId = setInterval(fetchMessages, 2000);
         }
 
+        // دالة جلب وعرض الرسائل
         function fetchMessages() {
             if (!currentPhone) return;
             
@@ -142,13 +182,11 @@
                 .then(res => res.json())
                 .then(data => {
                     const container = document.getElementById('messagesContainer');
-                    // حفظ موضع السكرول الحالي لمعرفة ما إذا كان المستخدم يقرأ الرسائل القديمة
                     const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 50;
                     
                     container.innerHTML = "";
                     data.messages.forEach(msg => {
                         const row = document.createElement('div');
-                        // تحديد كلاس الرسالة بناءً على من أرسلها
                         row.className = `msg-row ${msg.sender === 'me' ? 'me' : 'them'}`;
                         
                         row.innerHTML = `
@@ -159,13 +197,14 @@
                         container.appendChild(row);
                     });
 
-                    // النزول لآخر رسالة تلقائياً فقط إذا كان المستخدم في الأسفل
+                    // النزول لأسفل الرسائل تلقائياً عند وصول رسائل جديدة
                     if (isScrolledToBottom) {
                         container.scrollTop = container.scrollHeight;
                     }
                 });
         }
 
+        // دالة إرسال الرسالة بدون تحديث الصفحة
         function sendMessage(event) {
             event.preventDefault();
             const input = document.getElementById('messageInput');
@@ -178,15 +217,14 @@
             formData.append('phone', phone);
             formData.append('message', message);
 
-            // إرسال فوري بدون تحديث الصفحة
             fetch('/send', {
                 method: 'POST',
                 body: formData
             })
             .then(res => res.json())
             .then(data => {
-                input.value = ""; // تفريغ الحقل
-                fetchMessages();  // تحديث الشات فوراً
+                input.value = ""; 
+                fetchMessages();  // تحديث الشات فوراً لرؤية رسالتك المرسلة
             });
         }
     </script>
