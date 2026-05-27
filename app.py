@@ -23,15 +23,12 @@ def init_db():
         phone TEXT PRIMARY KEY
     )
     """)
-    # تم تحديث الجدول لدعم معرّف الرسالة وحالة التسليم/القراءة والتمييز بين مرسل ومستقبل
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        msg_id TEXT UNIQUE,
         phone TEXT,
         message TEXT,
-        sender TEXT DEFAULT 'them',
-        status TEXT DEFAULT 'sent'
+        sender TEXT DEFAULT 'them' 
     )
     """)
     conn.commit()
@@ -53,13 +50,9 @@ def send_message(phone, message):
         "text": {"body": message}
     }
     try:
-        response = requests.post(url, headers=headers, json=data)
-        res_data = response.json()
-        if "messages" in res_data:
-            return res_data["messages"][0]["id"] # إرجاع معرّف الرسالة لربطه بالحالة
+        requests.post(url, headers=headers, json=data)
     except Exception as e:
-        print(f"Error sending: {e}")
-    return None
+        print(f"Error sending to {phone}: {e}")
 
 # ================= CHAT PAGE =================
 @app.route("/chat")
@@ -71,7 +64,7 @@ def chat():
     conn.close()
     return render_template("chat.html", users=users)
 
-# ================= GET USERS API =================
+# ================= GET USERS (API) =================
 @app.route("/api/users")
 def get_users():
     conn = db()
@@ -81,7 +74,7 @@ def get_users():
     conn.close()
     return jsonify({"users": [dict(u) for u in users]})
 
-# ================= ADD NEW USER API (تفعيل زر إضافة رقم) =================
+# ================= ADD NEW USER MANUALLY =================
 @app.route("/api/add_user", methods=["POST"])
 def add_user():
     phone = request.form.get("phone", "").strip()
@@ -95,7 +88,7 @@ def add_user():
     conn.close()
     return jsonify({"status": "ok", "phone": phone})
 
-# ================= BROADCAST API (تفعيل زر إرسال للجميع) =================
+# ================= BROADCAST MESSAGE (إرسال للجميع) =================
 @app.route("/api/broadcast", methods=["POST"])
 def broadcast():
     message = request.form.get("message", "").strip()
@@ -107,13 +100,14 @@ def broadcast():
     c.execute("SELECT phone FROM users")
     users = c.fetchall()
 
+    # إرسال الرسالة لكل مستخدم في قاعدة البيانات وحفظها في الشات الخاص به
     for user in users:
         phone = user["phone"]
-        wamid = send_message(phone, message)
+        send_message(phone, message)
         c.execute("""
-        INSERT INTO messages (msg_id, phone, message, sender, status)
-        VALUES (?, ?, ?, 'me', 'sent')
-        """, (wamid, phone, message))
+        INSERT INTO messages (phone, message, sender)
+        VALUES (?, ?, 'me')
+        """, (phone, message))
         
     conn.commit()
     conn.close()
@@ -124,7 +118,11 @@ def broadcast():
 def messages(phone):
     conn = db()
     c = conn.cursor()
-    c.execute("SELECT * FROM messages WHERE phone=? ORDER BY id ASC", (phone,))
+    c.execute("""
+    SELECT * FROM messages
+    WHERE phone=?
+    ORDER BY id ASC
+    """, (phone,))
     msgs = c.fetchall()
     conn.close()
     return jsonify({"messages": [dict(m) for m in msgs]})
@@ -135,21 +133,21 @@ def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
-    wamid = send_message(phone, message)
+    send_message(phone, message)
 
     conn = db()
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
     c.execute("""
-    INSERT INTO messages (msg_id, phone, message, sender, status)
-    VALUES (?, ?, ?, 'me', 'sent')
-    """, (wamid, phone, message))
+    INSERT INTO messages (phone, message, sender)
+    VALUES (?, ?, 'me')
+    """, (phone, message))
     conn.commit()
     conn.close()
 
     return jsonify({"status": "ok", "message": message})
 
-# ================= WEBHOOK (تحديث الحالات والرسائل القادمة) =================
+# ================= WEBHOOK =================
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -159,37 +157,21 @@ def webhook():
 
     try:
         data = request.json
-        value = data["entry"][0]["changes"][0]["value"]
+        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
+        phone = msg["from"]
+        text = msg["text"]["body"]
 
         conn = db()
         c = conn.cursor()
-
-        # 1. تحديث حالة الرسالة المرسلة (delivered أو read)
-        if "statuses" in value:
-            status_obj = value["statuses"][0]
-            msg_id = status_obj["id"]
-            status_type = status_obj["status"]
-
-            c.execute("UPDATE messages SET status = ? WHERE msg_id = ?", (status_type, msg_id))
-            conn.commit()
-
-        # 2. استقبال الرسائل الجديدة من العملاء
-        elif "messages" in value:
-            msg = value["messages"][0]
-            phone = msg["from"]
-            text = msg["text"]["body"]
-            msg_id = msg["id"]
-
-            c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-            c.execute("""
-            INSERT OR IGNORE INTO messages (msg_id, phone, message, sender, status)
-            VALUES (?, ?, ?, 'them', 'read')
-            """, (msg_id, phone, text))
-            conn.commit()
-
+        c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+        c.execute("""
+        INSERT INTO messages (phone, message, sender)
+        VALUES (?, ?, 'them')
+        """, (phone, text))
+        conn.commit()
         conn.close()
-    except Exception as e:
-        print("Webhook Error:", e)
+    except:
+        pass
 
     return "ok", 200
 
