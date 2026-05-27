@@ -1,0 +1,26 @@
+<h2>Admin Panel</h2>
+
+<input id="title" placeholder="Title"><br>
+<input id="link" placeholder="Link"><br>
+<input id="category" placeholder="Category"><br>
+<input id="image" placeholder="Image URL"><br>
+
+<button onclick="add()">Add</button>
+
+<script>
+function add(){
+
+fetch("/add", {
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+title:document.getElementById("title").value,
+link:document.getElementById("link").value,
+category:document.getElementById("category").value,
+image:document.getElementById("image").value
+})
+})
+
+alert("Added 🚀")
+}
+</script>
