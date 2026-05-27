@@ -1,12 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import requests
 import sqlite3
 
 app = Flask(__name__)
 
-# =========================
-# 🔐 إعدادات واتساب
-# =========================
+# 🔐 إعدادات WhatsApp Cloud API
 VERIFY_TOKEN = "mytoken123"
 PHONE_NUMBER_ID = "1156014094256129"
 ACCESS_TOKEN = "EAAjZAQBZBWhDQBRvhhf97owU0uUDcmJkqcsNbBPZC7fnCXRw7q57njtrShlZCQN9RCYZB5TZCmL0viOWTxNcdaYDP4p8L8LOSDqDryVba06ZCaNjZCXyBOwCoZBLkHzzg6ZADZBX8I2ZC1XoOyPGAV5VITC5mBPXJTpiN2XHh0VZBTNQKs62d1wqg5ZAos1ZCSJx5yaVOiCiFLsw39QpLBZCnRxk6YtusnTw8ZA2CJHbZCF8BCLSz2rHsoqM1kMzpNBsf9ZAceXZAp3RlR8sEPziiND0HVhtZCZCtiBwZDZD"
@@ -30,25 +28,11 @@ def init_db():
 init_db()
 
 # =========================
-# 🟢 إرسال رسالة
+# 🟢 الصفحة الرئيسية (واجهة واتساب)
 # =========================
-def send_message(to, message):
-    url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-
-    headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": message}
-    }
-
-    return requests.post(url, headers=headers, json=data).text
-
+@app.route("/")
+def home():
+    return render_template("index.html")
 
 # =========================
 # 🟢 Webhook Verification (GET)
@@ -63,7 +47,6 @@ def verify():
         return challenge, 200
 
     return "error", 403
-
 
 # =========================
 # 🟢 استقبال الرسائل (POST)
@@ -83,16 +66,15 @@ def webhook():
         conn.commit()
         conn.close()
 
-        print("New message:", phone, text)
+        print(phone, text)
 
     except Exception as e:
         print("Error:", e)
 
     return "ok", 200
 
-
 # =========================
-# 🟢 عرض الرسائل (API)
+# 🟢 عرض الرسائل
 # =========================
 @app.route("/messages")
 def messages():
@@ -104,10 +86,26 @@ def messages():
 
     return jsonify(data)
 
+# =========================
+# 🟢 إرسال رسالة
+# =========================
+def send_message(to, message):
+    url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
-# =========================
-# 🟢 إرسال رسالة من المتصفح
-# =========================
+    headers = {
+        "Authorization": f"Bearer {ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": message}
+    }
+
+    return requests.post(url, headers=headers, json=data).text
+
 @app.route("/send", methods=["POST"])
 def send():
     phone = request.json.get("phone")
@@ -116,15 +114,6 @@ def send():
     result = send_message(phone, message)
 
     return jsonify({"status": "sent", "result": result})
-
-
-# =========================
-# 🟢 الصفحة الرئيسية
-# =========================
-@app.route("/")
-def home():
-    return "WhatsApp Panel is Running 🚀"
-
 
 # =========================
 # 🟢 تشغيل السيرفر
