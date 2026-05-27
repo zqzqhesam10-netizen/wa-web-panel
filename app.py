@@ -85,10 +85,17 @@ def send_message(phone, message):
         "messaging_product": "whatsapp",
         "to": phone,
         "type": "text",
-        "text": {"body": message}
+        "text": {
+            "body": message
+        }
     }
 
-    return requests.post(url, headers=headers, json=data).text
+    response = requests.post(url, headers=headers, json=data)
+
+    print("STATUS:", response.status_code)
+    print("RESPONSE:", response.text)
+
+    return response.text
 
 @app.route("/send", methods=["POST"])
 def send():
