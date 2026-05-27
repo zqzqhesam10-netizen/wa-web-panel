@@ -4,7 +4,6 @@
 <head>
 
 <meta charset="UTF-8">
-
 <title>WhatsApp Web</title>
 
 <style>
@@ -60,7 +59,6 @@ body{
 input{
     flex:1;
     padding:10px;
-    border:none;
 }
 
 button{
@@ -97,8 +95,8 @@ button{
 
 <div class="bottom">
 
-<input id="phone" placeholder="رقم">
-<input id="message" placeholder="رسالة">
+<input id="phone" placeholder="رقم الهاتف">
+<input id="message" placeholder="اكتب رسالة">
 
 <button onclick="sendMsg()">إرسال</button>
 
@@ -118,26 +116,31 @@ function openChat(phone){
 
 function loadMessages(){
 
-    if(!currentUser) return;
+    if(currentUser === "") return;
 
     fetch("/messages/" + currentUser)
     .then(r => r.json())
     .then(data => {
 
         let box = document.getElementById("messages");
+
         box.innerHTML = "";
 
-        data.messages.forEach(m => {
+        for(let m of data.messages){
+
             box.innerHTML += `<div class="msg">${m.message}</div>`;
-        });
+        }
 
     });
+
 }
 
 function sendMsg(){
 
     let phone = document.getElementById("phone").value;
     let message = document.getElementById("message").value;
+
+    if(phone === "" || message === "") return;
 
     fetch("/send", {
         method: "POST",
@@ -146,20 +149,16 @@ function sendMsg(){
         },
         body: `phone=${phone}&message=${message}`
     })
-    .then(res => res.json())
     .then(() => {
 
-        // 🔥 الحل الأساسي: تحديث فوري
-        loadMessages();
-
-        // مسح الرسالة فقط
         document.getElementById("message").value = "";
+
+        loadMessages(); // 🔥 أهم سطر
 
     });
 
 }
 
-// تحديث تلقائي
 setInterval(loadMessages, 2000);
 
 </script>
