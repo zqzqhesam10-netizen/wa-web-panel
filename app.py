@@ -4,13 +4,11 @@ import requests
 
 app = Flask(__name__)
 
-# ================= WHATSAPP =================
+# ================= CONFIG =================
 
 ACCESS_TOKEN = "EAAjZAQBZBWhDQBRv60Nz1iH9ZAZCJcHZCAujRZAgmbS4hbqZCgcJjMW3wvRQMJiCJrAndojed3ii4qlRnOYPLBW0gQoBFgVPYuZAnOdaeS4Q0Vemprx2IuXgvwcQvVEqZBWRLIipy71RFRGZARO4QZAPzq5X1bzdDnBfiZBwUV0Vnx6437wCnDP4bZC9Uh5JqcXd6yTv9kJ2ZBrHPrUNM9xTKrcI33qRJakyjStuozrdaQHp9GR6f3SzUxdUjQf4q1tL5AqKMPUCTmIbNfspZBhDDw2bfut"
 PHONE_NUMBER_ID = "1156014094256129"
 VERIFY_TOKEN = "mytoken123"
-
-ADMIN_PHONE = "96770331040"
 
 # ================= DB =================
 
@@ -19,21 +17,17 @@ def db():
     conn.row_factory = sqlite3.Row
     return conn
 
-# ================= INIT DB =================
-
 def init_db():
 
     conn = db()
     c = conn.cursor()
 
-    # users
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         phone TEXT PRIMARY KEY
     )
     """)
 
-    # messages
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,7 +67,7 @@ def send_message(phone, message):
 
 @app.route("/")
 def home():
-    return "WhatsApp Web Panel Running 🚀"
+    return "WhatsApp Web Running 🚀"
 
 # ================= CHAT PAGE =================
 
@@ -121,6 +115,7 @@ def send():
     # إرسال واتساب
     send_message(phone, message)
 
+    # حفظ
     conn = db()
     c = conn.cursor()
 
