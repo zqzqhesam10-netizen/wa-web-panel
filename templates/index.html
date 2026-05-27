@@ -1,58 +1,143 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>WhatsApp Web Panel</title>
+    <title>WhatsApp Panel</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial;
+            display: flex;
+            height: 100vh;
+        }
 
-<style>
-body{margin:0;font-family:Arial;display:flex;height:100vh;background:#0b141a;color:white}
+        .sidebar {
+            width: 30%;
+            background: #075E54;
+            color: white;
+            overflow-y: auto;
+        }
 
-.left{width:30%;background:#111b21;overflow:auto}
-.right{width:70%;display:flex;flex-direction:column}
+        .chat {
+            width: 70%;
+            display: flex;
+            flex-direction: column;
+        }
 
-.contact{padding:15px;border-bottom:1px solid #222;cursor:pointer}
-.contact:hover{background:#202c33}
+        .header {
+            background: #128C7E;
+            padding: 10px;
+            color: white;
+        }
 
-.chat{flex:1;padding:20px;overflow:auto}
+        .messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background: #ECE5DD;
+        }
 
-.msg{background:#202c33;padding:10px;margin:10px;border-radius:8px;max-width:60%}
+        .input {
+            display: flex;
+        }
 
-.input{display:flex;padding:10px;background:#202c33}
+        input {
+            flex: 1;
+            padding: 10px;
+        }
 
-input{flex:1;padding:10px;border:none}
-button{padding:10px;background:#00a884;border:none;color:white}
-</style>
+        button {
+            padding: 10px;
+            background: #128C7E;
+            color: white;
+            border: none;
+        }
 
+        .contact {
+            padding: 10px;
+            border-bottom: 1px solid #0a7a66;
+            cursor: pointer;
+        }
+
+        .msg {
+            background: white;
+            padding: 8px;
+            margin: 5px;
+            border-radius: 5px;
+        }
+    </style>
 </head>
-
 <body>
 
-<div class="left">
-<h3 style="padding:10px">Contacts</h3>
-
-{% for c in contacts %}
-<div class="contact">{{c[0]}}</div>
-{% endfor %}
-
+<div class="sidebar" id="contacts">
+    <h3 style="padding:10px;">Contacts</h3>
 </div>
-
-<div class="right">
 
 <div class="chat">
+    <div class="header" id="chatHeader">Chat</div>
 
-{% for m in messages %}
-<div class="msg">{{m[0]}} : {{m[1]}}</div>
-{% endfor %}
+    <div class="messages" id="messages"></div>
 
+    <div class="input">
+        <input id="msg" placeholder="Type message">
+        <button onclick="send()">Send</button>
+    </div>
 </div>
 
-<form class="input" method="POST" action="/send">
-<input name="phone" placeholder="رقم">
-<input name="msg" placeholder="رسالة">
-<button>إرسال</button>
-</form>
+<script>
+let current = "";
 
-</div>
+async function loadContacts(){
+    let res = await fetch('/messages');
+    let data = await res.json();
+
+    let contacts = document.getElementById("contacts");
+    contacts.innerHTML = "<h3 style='padding:10px;'>Contacts</h3>";
+
+    let unique = [...new Set(data.map(x => x[0]))];
+
+    unique.forEach(p=>{
+        let div = document.createElement("div");
+        div.className = "contact";
+        div.innerText = p;
+        div.onclick = ()=>loadChat(p);
+        contacts.appendChild(div);
+    });
+}
+
+async function loadChat(phone){
+    current = phone;
+    document.getElementById("chatHeader").innerText = phone;
+
+    let res = await fetch('/messages');
+    let data = await res.json();
+
+    let box = document.getElementById("messages");
+    box.innerHTML = "";
+
+    data.forEach(m=>{
+        if(m[0] == phone){
+            let div = document.createElement("div");
+            div.className = "msg";
+            div.innerText = m[1];
+            box.appendChild(div);
+        }
+    });
+}
+
+async function send(){
+    let msg = document.getElementById("msg").value;
+
+    await fetch('/send',{
+        method:"POST",
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({phone:current,message:msg})
+    });
+
+    loadChat(current);
+}
+
+setInterval(loadContacts,3000);
+</script>
 
 </body>
 </html>
