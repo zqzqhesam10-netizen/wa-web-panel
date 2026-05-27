@@ -49,7 +49,10 @@ def send_message(phone, message):
         "type": "text",
         "text": {"body": message}
     }
-    requests.post(url, headers=headers, json=data)
+    try:
+        requests.post(url, headers=headers, json=data)
+    except Exception as e:
+        print(f"Error sending to {phone}: {e}")
 
 # ================= CHAT PAGE =================
 @app.route("/chat")
@@ -72,7 +75,6 @@ def get_users():
     return jsonify({"users": [dict(u) for u in users]})
 
 # ================= ADD NEW USER MANUALLY =================
-# هذا المسار يسمح لك بإضافة رقم هاتف جديد من لوحة التحكم مباشرة دون تكرار
 @app.route("/api/add_user", methods=["POST"])
 def add_user():
     phone = request.form.get("phone", "").strip()
@@ -85,6 +87,31 @@ def add_user():
     conn.commit()
     conn.close()
     return jsonify({"status": "ok", "phone": phone})
+
+# ================= BROADCAST MESSAGE (إرسال للجميع) =================
+@app.route("/api/broadcast", methods=["POST"])
+def broadcast():
+    message = request.form.get("message", "").strip()
+    if not message:
+        return jsonify({"status": "error", "message": "الرسالة فارغة"}), 400
+
+    conn = db()
+    c = conn.cursor()
+    c.execute("SELECT phone FROM users")
+    users = c.fetchall()
+
+    # إرسال الرسالة لكل مستخدم في قاعدة البيانات وحفظها في الشات الخاص به
+    for user in users:
+        phone = user["phone"]
+        send_message(phone, message)
+        c.execute("""
+        INSERT INTO messages (phone, message, sender)
+        VALUES (?, ?, 'me')
+        """, (phone, message))
+        
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "sent_count": len(users)})
 
 # ================= GET MESSAGES =================
 @app.route("/messages/<phone>")
