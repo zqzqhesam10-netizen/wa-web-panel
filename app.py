@@ -10,46 +10,30 @@ ACCESS_TOKEN = "EAAjZAQBZBWhDQBRv60Nz1iH9ZAZCJcHZCAujRZAgmbS4hbqZCgcJjMW3wvRQMJi
 PHONE_NUMBER_ID = "1156014094256129"
 VERIFY_TOKEN = "mytoken123"
 
-# ================= DATABASE =================
+ADMIN_PHONE = "967780331040"  # رقمك أنت
 
-def broadcast(title, category, image):
+# ================= DB =================
 
-    conn = db()
-    c = conn.cursor()
+def db():
+    conn = sqlite3.connect("chat.db")
+    conn.row_factory = sqlite3.Row
+    return conn
 
-    c.execute("967780331040")
-    users = c.fetchall()
-
-    msg = f"""🔥 New Release
-
-🎬 {title}
-📺 {category}
-"""
-
-    # إرسال للجميع
-    for u in users:
-        send_message(u["phone"], msg, image)
-
-    # إرسال لك أنت
-    send_message(ADMIN_PHONE, "📢 تم إضافة محتوى جديد:\n" + title, image)
-
-    conn.close()
-
-# ================= INIT DB =================
+# ================= INIT =================
 
 def init_db():
 
     conn = db()
     c = conn.cursor()
 
-    # المستخدمين
+    # users
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         phone TEXT PRIMARY KEY
     )
     """)
 
-    # المحتوى
+    # content
     c.execute("""
     CREATE TABLE IF NOT EXISTS content (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,7 +43,7 @@ def init_db():
     )
     """)
 
-    # رسائل
+    # messages
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,47 +53,13 @@ def init_db():
     """)
 
     conn.commit()
-
-    # بيانات تجريبية
-    c.execute("SELECT * FROM content")
-
-    if not c.fetchone():
-
-        c.execute("""
-        INSERT INTO content
-        (title, category, image)
-
-        VALUES (?,?,?)
-        """, (
-
-            "Attack on Titan",
-            "Anime",
-            "https://upload.wikimedia.org/wikipedia/en/7/70/Attack_on_Titan_S1_DVD.jpg"
-
-        ))
-
-        c.execute("""
-        INSERT INTO content
-        (title, category, image)
-
-        VALUES (?,?,?)
-        """, (
-
-            "Breaking Bad",
-            "Series",
-            "https://upload.wikimedia.org/wikipedia/en/6/61/Breaking_Bad_title_card.png"
-
-        ))
-
-        conn.commit()
-
     conn.close()
 
 init_db()
 
-# ================= SEND WHATSAPP =================
+# ================= WHATSAPP SEND =================
 
-def send_message(phone, text):
+def send_message(phone, text, image=None):
 
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
@@ -118,16 +68,55 @@ def send_message(phone, text):
         "Content-Type": "application/json"
     }
 
-    data = {
-        "messaging_product": "whatsapp",
-        "to": phone,
-        "type": "text",
-        "text": {
-            "body": text
+    if image:
+
+        data = {
+            "messaging_product": "whatsapp",
+            "to": phone,
+            "type": "image",
+            "image": {
+                "link": image,
+                "caption": text
+            }
         }
-    }
+
+    else:
+
+        data = {
+            "messaging_product": "whatsapp",
+            "to": phone,
+            "type": "text",
+            "text": {
+                "body": text
+            }
+        }
 
     requests.post(url, headers=headers, json=data)
+
+# ================= BROADCAST =================
+
+def broadcast(title, category, image):
+
+    conn = db()
+    c = conn.cursor()
+
+    c.execute("SELECT phone FROM users")
+    users = c.fetchall()
+
+    msg = f"""🔥 New Release
+
+🎬 {title}
+📺 {category}
+"""
+
+    # لكل المستخدمين
+    for u in users:
+        send_message(u["phone"], msg, image)
+
+    # لك أنت
+    send_message(ADMIN_PHONE, "📢 محتوى جديد:\n" + title, image)
+
+    conn.close()
 
 # ================= HOME =================
 
@@ -161,7 +150,7 @@ def chat():
 
     return render_template("chat.html", users=users)
 
-# ================= SEND FROM PANEL =================
+# ================= SEND MESSAGE =================
 
 @app.route("/send", methods=["POST"])
 def send():
@@ -169,8 +158,10 @@ def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
+    # إرسال واتساب
     send_message(phone, message)
 
+    # حفظ الرسالة
     conn = db()
     c = conn.cursor()
 
@@ -182,25 +173,46 @@ def send():
     conn.commit()
     conn.close()
 
-    # يرجعك للشات بدل sent
+    # يرجع نفس الصفحة (بدون sent)
     return render_template("chat.html")
+
+# ================= ADD CONTENT =================
+
+@app.route("/add", methods=["POST"])
+def add():
+
+    title = request.form["title"]
+    category = request.form["category"]
+    image = request.form["image"]
+
+    conn = db()
+    c = conn.cursor()
+
+    c.execute("""
+    INSERT INTO content (title, category, image)
+    VALUES (?,?,?)
+    """, (title, category, image))
+
+    conn.commit()
+    conn.close()
+
+    # 🔥 إشعارات تلقائية
+    broadcast(title, category, image)
+
+    return "ok"
 
 # ================= WEBHOOK =================
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
 
-    # VERIFY
     if request.method == "GET":
 
-        token = request.args.get("hub.verify_token")
-
-        if token == VERIFY_TOKEN:
+        if request.args.get("hub.verify_token") == VERIFY_TOKEN:
             return request.args.get("hub.challenge")
 
         return "error", 403
 
-    # RECEIVE
     try:
 
         data = request.json
@@ -208,33 +220,23 @@ def webhook():
         msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
 
         phone = msg["from"]
-
         text = msg["text"]["body"]
 
         conn = db()
         c = conn.cursor()
 
-        # حفظ المستخدم
+        c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+
         c.execute("""
-        INSERT OR IGNORE INTO users
-        (phone)
-
-        VALUES (?)
-        """, (phone,))
-
-        # حفظ الرسالة
-        c.execute("""
-        INSERT INTO messages
-        (phone, message)
-
+        INSERT INTO messages (phone, message)
         VALUES (?,?)
         """, (phone, text))
 
         conn.commit()
         conn.close()
 
-    except Exception as e:
-        print(e)
+    except:
+        pass
 
     return "ok", 200
 
