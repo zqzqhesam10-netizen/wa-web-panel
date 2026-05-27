@@ -36,6 +36,10 @@ body{
     cursor:pointer;
 }
 
+.user:hover{
+    background:#202c33;
+}
+
 .messages{
     flex:1;
     padding:15px;
@@ -59,6 +63,8 @@ body{
 input{
     flex:1;
     padding:10px;
+    border:none;
+    outline:none;
 }
 
 button{
@@ -67,6 +73,7 @@ button{
     background:#00a884;
     border:none;
     color:white;
+    cursor:pointer;
 }
 
 </style>
@@ -75,6 +82,7 @@ button{
 
 <body>
 
+<!-- USERS -->
 <div class="sidebar">
 
 <h3 style="padding:10px">Chats</h3>
@@ -89,9 +97,10 @@ button{
 
 </div>
 
+<!-- CHAT -->
 <div class="chat">
 
-<div class="messages" id="messages"></div>
+<div class="messages" id="messages">اختر محادثة</div>
 
 <div class="bottom">
 
@@ -106,7 +115,7 @@ button{
 
 <script>
 
-let currentUser = "";
+let currentUser = null;
 
 function openChat(phone){
     currentUser = phone;
@@ -116,20 +125,20 @@ function openChat(phone){
 
 function loadMessages(){
 
-    if(currentUser === "") return;
+    if(!currentUser){
+        return;
+    }
 
     fetch("/messages/" + currentUser)
     .then(r => r.json())
     .then(data => {
 
         let box = document.getElementById("messages");
-
         box.innerHTML = "";
 
-        for(let m of data.messages){
-
+        data.messages.forEach(m => {
             box.innerHTML += `<div class="msg">${m.message}</div>`;
-        }
+        });
 
     });
 
@@ -140,7 +149,7 @@ function sendMsg(){
     let phone = document.getElementById("phone").value;
     let message = document.getElementById("message").value;
 
-    if(phone === "" || message === "") return;
+    if(!phone || !message) return;
 
     fetch("/send", {
         method: "POST",
@@ -153,13 +162,20 @@ function sendMsg(){
 
         document.getElementById("message").value = "";
 
-        loadMessages(); // 🔥 أهم سطر
+        loadMessages();
 
     });
 
 }
 
-setInterval(loadMessages, 2000);
+// تحديث تلقائي
+setInterval(() => {
+
+    if(currentUser){
+        loadMessages();
+    }
+
+}, 1500);
 
 </script>
 
