@@ -14,9 +14,11 @@
         .sidebar-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; justify-content: space-between; }
         .avatar { width: 40px; height: 40px; background: #dfe5e7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #54656f; font-size: 20px; }
         
-        /* زر محادثة جديدة */
-        .btn-new-chat { background: transparent; border: none; color: #54656f; font-size: 18px; cursor: pointer; padding: 5px; transition: 0.2s; }
-        .btn-new-chat:hover { color: #00a884; }
+        /* أزرار التحكم العلوي */
+        .header-actions { display: flex; align-items: center; gap: 12px; }
+        .btn-action { background: transparent; border: none; color: #54656f; font-size: 18px; cursor: pointer; padding: 5px; transition: 0.2s; }
+        .btn-action:hover { color: #00a884; }
+        .btn-action.broadcast-btn:hover { color: #0284c7; }
 
         .search-box { padding: 8px 12px; background: #fff; border-bottom: 1px solid #f0f2f5; }
         .search-inner { background: #f0f2f5; border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 10px; color: #667781; }
@@ -56,14 +58,16 @@
         .welcome-screen i { font-size: 80px; color: #ced5d8; margin-bottom: 20px; }
         .welcome-screen h2 { color: #41525d; font-weight: 300; margin-bottom: 10px; }
 
-        /* نافذة إضافة رقم جديد المنبثقة */
+        /* النوافذ المنبثقة */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 999; }
-        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .modal-content h3 { margin-bottom: 15px; color: #41525d; font-size: 18px; }
-        .modal-content input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 15px; font-size: 16px; outline: none; text-align: left; direction: ltr; }
+        .modal-content input, .modal-content textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 15px; font-size: 15px; outline: none; }
+        .modal-content textarea { height: 100px; resize: none; font-family: inherit; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
         .modal-btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold; }
         .modal-btn.confirm { background: #00a884; color: white; }
+        .modal-btn.broadcast-confirm { background: #0284c7; color: white; }
         .modal-btn.cancel { background: #f0f2f5; color: #54656f; }
     </style>
 </head>
@@ -72,10 +76,22 @@
     <div class="modal" id="newChatModal">
         <div class="modal-content">
             <h3>بدء محادثة جديدة</h3>
-            <input type="text" id="newPhoneInput" placeholder="مثال: 967770000000" autocomplete="off">
+            <input type="text" id="newPhoneInput" placeholder="مثال: 967770000000" autocomplete="off" style="direction: ltr; text-align: left;">
             <div class="modal-actions">
                 <button class="modal-btn cancel" onclick="closeNewChatModal()">إلغاء</button>
                 <button class="modal-btn confirm" onclick="createNewChat()">إضافة وفتح</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="broadcastModal">
+        <div class="modal-content">
+            <h3>إرسال رسالة للجميع 📢</h3>
+            <p style="font-size: 13px; color: #667781; margin-bottom: 10px;">سيتم إرسال هذه الرسالة إلى كافة جهات الاتصال الموجودة في القائمة الجانبية حالياً.</p>
+            <textarea id="broadcastMessageInput" placeholder="اكتب الرسالة الجماعية هنا..."></textarea>
+            <div class="modal-actions">
+                <button class="modal-btn cancel" onclick="closeBroadcastModal()">إلغاء</button>
+                <button class="modal-btn broadcast-confirm" onclick="sendBroadcast()">إرسال الآن</button>
             </div>
         </div>
     </div>
@@ -84,9 +100,9 @@
         <div class="sidebar-header">
             <div class="avatar"><i class="fas fa-user"></i></div>
             <span style="font-weight: bold; color: #41525d;">محادثات الواتساب</span>
-            <div style="color: #54656f; gap: 15px; display: flex; align-items: center;">
-                <button class="btn-new-chat" title="محادثة جديدة" onclick="openNewChatModal()"><i class="fas fa-comment-medical"></i></button>
-                <i class="fas fa-circle-notch"></i>
+            <div class="header-actions">
+                <button class="btn-action broadcast-btn" title="إرسال رسالة للجميع" onclick="openBroadcastModal()"><i class="fas fa-bullhorn"></i></button>
+                <button class="btn-action" title="محادثة جديدة" onclick="openNewChatModal()"><i class="fas fa-comment-medical"></i></button>
             </div>
         </div>
         <div class="search-box">
@@ -133,7 +149,7 @@
     <div class="welcome-screen" id="welcomeScreen">
         <i class="fab fa-whatsapp"></i>
         <h2>واتساب ويب للمسؤول</h2>
-        <p>اضغط على أيقونة المحادثة الفوقية <i class="fas fa-comment-medical" style="font-size:16px; color:#00a884"></i> لإضافة رقم جديد وتدشين محادثة فوراً.</p>
+        <p>اضغط على أيقونة المذياع <i class="fas fa-bullhorn" style="font-size:16px; color:#0284c7"></i> لإرسال رسالة جماعية لكافة الأرقام دفعة واحدة.</p>
     </div>
 
     <script>
@@ -170,18 +186,52 @@
                 });
         }
 
-        // التحكم بالنافذة المنبثقة (Pop-up)
+        // التحكم بنافذة إضافة رقم
         function openNewChatModal() {
             document.getElementById('newChatModal').style.display = 'flex';
             document.getElementById('newPhoneInput').focus();
         }
-
         function closeNewChatModal() {
             document.getElementById('newChatModal').style.display = 'none';
             document.getElementById('newPhoneInput').value = '';
         }
 
-        // إنشاء المحادثة الجديدة للرقم المدخل يدوياً
+        // التحكم بنافذة الإرسال الجماعي (Broadcast)
+        function openBroadcastModal() {
+            document.getElementById('broadcastModal').style.display = 'flex';
+            document.getElementById('broadcastMessageInput').focus();
+        }
+        function closeBroadcastModal() {
+            document.getElementById('broadcastModal').style.display = 'none';
+            document.getElementById('broadcastMessageInput').value = '';
+        }
+
+        // تنفيذ الإرسال الجماعي للجميع
+        function sendBroadcast() {
+            const textarea = document.getElementById('broadcastMessageInput');
+            const message = textarea.value.trim();
+
+            if(!message) return alert("الرجاء كتابة نص الرسالة أولاً!");
+
+            const formData = new FormData();
+            formData.append('message', message);
+
+            fetch('/api/broadcast', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'ok') {
+                    alert(`تم إرسال الرسالة الجماعية بنجاح إلى ${data.sent_count} رقم!`);
+                    closeBroadcastModal();
+                    fetchMessages(); // تحديث المحادثة المفتوحة حالياً إن وجدت
+                } else {
+                    alert("حدث خطأ أثناء الإرسال.");
+                }
+            });
+        }
+
         function createNewChat() {
             const phoneInput = document.getElementById('newPhoneInput');
             const phone = phoneInput.value.trim();
@@ -199,7 +249,6 @@
             .then(data => {
                 if(data.status === 'ok') {
                     closeNewChatModal();
-                    // تحديث القائمة الجانبية فوراً ثم فتح شاشة الشات للرقم المضاف حديثاً
                     fetchUsersList();
                     openChat(phone, null);
                 }
@@ -218,7 +267,6 @@
             if(element) {
                 element.classList.add('active');
             } else {
-                // الانتظار أجزاء من الثانية للتأكد من بناء عنصر الـ DOM عند الإضافة اليدوية
                 setTimeout(() => {
                     const target = document.querySelector(`.user-item[data-phone="${phone}"]`);
                     if(target) target.classList.add('active');
