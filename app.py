@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, request, render_template, jsonify
 import sqlite3
 import requests
 
@@ -10,7 +10,7 @@ ACCESS_TOKEN = "EAAjZAQBZBWhDQBRv60Nz1iH9ZAZCJcHZCAujRZAgmbS4hbqZCgcJjMW3wvRQMJi
 PHONE_NUMBER_ID = "1156014094256129"
 VERIFY_TOKEN = "mytoken123"
 
-ADMIN_PHONE = "967780331040"  # رقمك أنت
+ADMIN_PHONE = "96770331040"
 
 # ================= DB =================
 
@@ -19,7 +19,7 @@ def db():
     conn.row_factory = sqlite3.Row
     return conn
 
-# ================= INIT =================
+# ================= INIT DB =================
 
 def init_db():
 
@@ -30,16 +30,6 @@ def init_db():
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         phone TEXT PRIMARY KEY
-    )
-    """)
-
-    # content
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS content (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        category TEXT,
-        image TEXT
     )
     """)
 
@@ -59,7 +49,7 @@ init_db()
 
 # ================= WHATSAPP SEND =================
 
-def send_message(phone, text, image=None):
+def send_message(phone, message):
 
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
@@ -68,71 +58,22 @@ def send_message(phone, text, image=None):
         "Content-Type": "application/json"
     }
 
-    if image:
-
-        data = {
-            "messaging_product": "whatsapp",
-            "to": phone,
-            "type": "image",
-            "image": {
-                "link": image,
-                "caption": text
-            }
+    data = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "text",
+        "text": {
+            "body": message
         }
-
-    else:
-
-        data = {
-            "messaging_product": "whatsapp",
-            "to": phone,
-            "type": "text",
-            "text": {
-                "body": text
-            }
-        }
+    }
 
     requests.post(url, headers=headers, json=data)
-
-# ================= BROADCAST =================
-
-def broadcast(title, category, image):
-
-    conn = db()
-    c = conn.cursor()
-
-    c.execute("SELECT phone FROM users")
-    users = c.fetchall()
-
-    msg = f"""🔥 New Release
-
-🎬 {title}
-📺 {category}
-"""
-
-    # لكل المستخدمين
-    for u in users:
-        send_message(u["phone"], msg, image)
-
-    # لك أنت
-    send_message(ADMIN_PHONE, "📢 محتوى جديد:\n" + title, image)
-
-    conn.close()
 
 # ================= HOME =================
 
 @app.route("/")
 def home():
-
-    conn = db()
-    c = conn.cursor()
-
-    c.execute("SELECT * FROM content ORDER BY id DESC")
-
-    items = c.fetchall()
-
-    conn.close()
-
-    return render_template("index.html", items=items)
+    return "WhatsApp Web Panel Running 🚀"
 
 # ================= CHAT PAGE =================
 
@@ -143,12 +84,31 @@ def chat():
     c = conn.cursor()
 
     c.execute("SELECT * FROM users")
-
     users = c.fetchall()
 
     conn.close()
 
     return render_template("chat.html", users=users)
+
+# ================= GET MESSAGES =================
+
+@app.route("/messages/<phone>")
+def messages(phone):
+
+    conn = db()
+    c = conn.cursor()
+
+    c.execute("""
+    SELECT * FROM messages
+    WHERE phone=?
+    ORDER BY id ASC
+    """, (phone,))
+
+    msgs = c.fetchall()
+
+    conn.close()
+
+    return jsonify({"messages": [dict(m) for m in msgs]})
 
 # ================= SEND MESSAGE =================
 
@@ -161,7 +121,6 @@ def send():
     # إرسال واتساب
     send_message(phone, message)
 
-    # حفظ الرسالة
     conn = db()
     c = conn.cursor()
 
@@ -173,33 +132,7 @@ def send():
     conn.commit()
     conn.close()
 
-    # يرجع نفس الصفحة (بدون sent)
-    return render_template("chat.html")
-
-# ================= ADD CONTENT =================
-
-@app.route("/add", methods=["POST"])
-def add():
-
-    title = request.form["title"]
-    category = request.form["category"]
-    image = request.form["image"]
-
-    conn = db()
-    c = conn.cursor()
-
-    c.execute("""
-    INSERT INTO content (title, category, image)
-    VALUES (?,?,?)
-    """, (title, category, image))
-
-    conn.commit()
-    conn.close()
-
-    # 🔥 إشعارات تلقائية
-    broadcast(title, category, image)
-
-    return "ok"
+    return jsonify({"status": "ok"})
 
 # ================= WEBHOOK =================
 
@@ -240,7 +173,7 @@ def webhook():
 
     return "ok", 200
 
-# ================= START =================
+# ================= RUN =================
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
