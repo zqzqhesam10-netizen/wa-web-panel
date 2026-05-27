@@ -1,32 +1,43 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<style>
-body{background:#111;color:white;font-family:Arial}
-.card{
-    width:200px;
-    display:inline-block;
-    margin:10px;
-    background:#222;
-    padding:10px;
-    border-radius:10px;
-}
-img{width:100%;border-radius:10px}
-a{color:white;text-decoration:none}
-</style>
+
+<meta charset="UTF-8">
+
+<title>Netflix Clone</title>
+
+<link rel="stylesheet" href="/static/style.css">
+
 </head>
 
 <body>
 
-<h1>🎬 Netflix Clone</h1>
+<div class="topbar">
+    <h1>🎬 Netflix Clone</h1>
+</div>
+
+<div class="container">
 
 {% for i in items %}
+
 <div class="card">
+
     <img src="{{ i['image'] }}">
-    <h3>{{ i['title'] }}</h3>
-    <a href="/watch/{{ i['id'] }}">▶ Watch</a>
+
+    <div class="info">
+
+        <h3>{{ i['title'] }}</h3>
+
+        <p>{{ i['category'] }}</p>
+
+    </div>
+
 </div>
+
 {% endfor %}
+
+</div>
 
 </body>
 </html>
