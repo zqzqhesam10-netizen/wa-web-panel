@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>WhatsApp Web Panel</title>
+
+<style>
+body{margin:0;font-family:Arial;display:flex;height:100vh;background:#0b141a;color:white}
+
+.left{width:30%;background:#111b21;overflow:auto}
+.right{width:70%;display:flex;flex-direction:column}
+
+.contact{padding:15px;border-bottom:1px solid #222;cursor:pointer}
+.contact:hover{background:#202c33}
+
+.chat{flex:1;padding:20px;overflow:auto}
+
+.msg{background:#202c33;padding:10px;margin:10px;border-radius:8px;max-width:60%}
+
+.input{display:flex;padding:10px;background:#202c33}
+
+input{flex:1;padding:10px;border:none}
+button{padding:10px;background:#00a884;border:none;color:white}
+</style>
+
+</head>
+
+<body>
+
+<div class="left">
+<h3 style="padding:10px">Contacts</h3>
+
+{% for c in contacts %}
+<div class="contact">{{c[0]}}</div>
+{% endfor %}
+
+</div>
+
+<div class="right">
+
+<div class="chat">
+
+{% for m in messages %}
+<div class="msg">{{m[0]}} : {{m[1]}}</div>
+{% endfor %}
+
+</div>
+
+<form class="input" method="POST" action="/send">
+<input name="phone" placeholder="رقم">
+<input name="msg" placeholder="رسالة">
+<button>إرسال</button>
+</form>
+
+</div>
+
+</body>
+</html>
