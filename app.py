@@ -18,12 +18,13 @@ def db():
 def init_db():
     conn = db()
     c = conn.cursor()
+    # جدول المستخدمين لجهات الاتصال (يمنع التكرار بوجود PRIMARY KEY)
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         phone TEXT PRIMARY KEY
     )
     """)
-    # إضافة حقل sender لمعرفة من أرسل الرسالة (me أو them)
+    # جدول الرسائل ويحتوي على حقل sender لمعرفة من أرسل الرسالة
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +63,17 @@ def chat():
     conn.close()
     return render_template("chat.html", users=users)
 
+# ================= GET USERS (API) =================
+# هذا المسار الجديد يغذي القائمة الجانبية بالبيانات تلقائياً في الخلفية
+@app.route("/api/users")
+def get_users():
+    conn = db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users")
+    users = c.fetchall()
+    conn.close()
+    return jsonify({"users": [dict(u) for u in users]})
+
 # ================= GET MESSAGES =================
 @app.route("/messages/<phone>")
 def messages(phone):
@@ -82,11 +94,15 @@ def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
-    # إرسال واتساب
+    # إرسال الرسالة إلى الواتساب
     send_message(phone, message)
 
     conn = db()
     c = conn.cursor()
+    
+    # في حال قمت ببدء محادثة من رقم لم يراسلنا من قبل، يضاف تلقائياً لجهات الاتصال وبدون تكرار
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+    
     # حفظ الرسالة مع تحديد أن المرسل هو أنا 'me'
     c.execute("""
     INSERT INTO messages (phone, message, sender)
@@ -113,9 +129,11 @@ def webhook():
 
         conn = db()
         c = conn.cursor()
+        
+        # عند استقبال أي رسالة جديدة، يتم حفظ الرقم تلقائياً، والـ IGNORE تمنع التكرار
         c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
         
-        # حفظ الرسالة القادمة وتحديد المرسل 'them'
+        # حفظ الرسالة القادمة وتحديد المرسل الخارجي 'them'
         c.execute("""
         INSERT INTO messages (phone, message, sender)
         VALUES (?, ?, 'them')
