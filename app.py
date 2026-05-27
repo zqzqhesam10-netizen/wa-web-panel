@@ -23,13 +23,16 @@ def init_db():
         phone TEXT PRIMARY KEY
     )
     """)
-    # إضافة حقل sender لمعرفة من أرسل الرسالة (me أو them)
+    # إضافة حقل timestamp ليقوم بتسجيل الوقت الحالي تلقائياً CURRENT_TIMESTAMP
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        msg_id TEXT UNIQUE,
         phone TEXT,
         message TEXT,
-        sender TEXT DEFAULT 'them' 
+        sender TEXT DEFAULT 'them',
+        status TEXT DEFAULT 'sent',
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
     conn.commit()
@@ -39,6 +42,7 @@ init_db()
 
 # ================= SEND WHATSAPP =================
 def send_message(phone, message):
+    clean_phone = str(phone).replace("+", "").strip()
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {ACCESS_TOKEN}",
@@ -46,13 +50,24 @@ def send_message(phone, message):
     }
     data = {
         "messaging_product": "whatsapp",
-        "to": phone,
+        "to": clean_phone,
         "type": "text",
         "text": {"body": message}
     }
-    requests.post(url, headers=headers, json=data)
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        res_data = response.json()
+        
+        print(f"--- محاولة إرسال إلى {clean_phone} ---")
+        print("رد فيسبوك الرسمي:", res_data)
+        
+        if "messages" in res_data:
+            return res_data["messages"][0]["id"]
+    except Exception as e:
+        print(f"❌ خطأ: {e}")
+    return None
 
-# ================= CHAT PAGE =================
+# ================= ROUTES =================
 @app.route("/chat")
 def chat():
     conn = db()
@@ -62,42 +77,86 @@ def chat():
     conn.close()
     return render_template("chat.html", users=users)
 
-# ================= GET MESSAGES =================
+@app.route("/api/users")
+def get_users():
+    conn = db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users")
+    users = c.fetchall()
+    conn.close()
+    return jsonify({"users": [dict(u) for u in users]})
+
+@app.route("/api/add_user", methods=["POST"])
+def add_user():
+    phone = request.form.get("phone", "").strip()
+    if not phone:
+        return jsonify({"status": "error", "message": "الرقم مطلوب"}), 400
+    
+    conn = db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "phone": phone})
+
+@app.route("/api/broadcast", methods=["POST"])
+def broadcast():
+    message = request.form.get("message", "").strip()
+    if not message:
+        return jsonify({"status": "error", "message": "الرسالة فارغة"}), 400
+
+    conn = db()
+    c = conn.cursor()
+    c.execute("SELECT phone FROM users")
+    users = c.fetchall()
+
+    for user in users:
+        phone = user["phone"]
+        wamid = send_message(phone, message)
+        c.execute("""
+        INSERT INTO messages (msg_id, phone, message, sender, status)
+        VALUES (?, ?, ?, 'me', 'sent')
+        """, (wamid, phone, message))
+        
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "sent_count": len(users)})
+
 @app.route("/messages/<phone>")
 def messages(phone):
     conn = db()
     c = conn.cursor()
+    # جلب الوقت وتنسيقه مباشرة من القاعدة لجعل العرض بسيط (ساعة:دقيقة)
     c.execute("""
-    SELECT * FROM messages
-    WHERE phone=?
+    SELECT id, msg_id, phone, message, sender, status, 
+           strftime('%H:%M', datetime(timestamp, 'localtime')) as msg_time 
+    FROM messages 
+    WHERE phone=? 
     ORDER BY id ASC
     """, (phone,))
     msgs = c.fetchall()
     conn.close()
     return jsonify({"messages": [dict(m) for m in msgs]})
 
-# ================= SEND MESSAGE =================
 @app.route("/send", methods=["POST"])
 def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
-    # إرسال واتساب
-    send_message(phone, message)
+    wamid = send_message(phone, message)
 
     conn = db()
     c = conn.cursor()
-    # حفظ الرسالة مع تحديد أن المرسل هو أنا 'me'
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
     c.execute("""
-    INSERT INTO messages (phone, message, sender)
-    VALUES (?, ?, 'me')
-    """, (phone, message))
+    INSERT INTO messages (msg_id, phone, message, sender, status)
+    VALUES (?, ?, ?, 'me', 'sent')
+    """, (wamid, phone, message))
     conn.commit()
     conn.close()
 
     return jsonify({"status": "ok", "message": message})
 
-# ================= WEBHOOK =================
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -107,24 +166,34 @@ def webhook():
 
     try:
         data = request.json
-        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
-        phone = msg["from"]
-        text = msg["text"]["body"]
+        value = data["entry"][0]["changes"][0]["value"]
 
         conn = db()
         c = conn.cursor()
-        c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-        
-        # حفظ الرسالة القادمة وتحديد المرسل 'them'
-        c.execute("""
-        INSERT INTO messages (phone, message, sender)
-        VALUES (?, ?, 'them')
-        """, (phone, text))
-        
-        conn.commit()
+
+        if "statuses" in value:
+            status_obj = value["statuses"][0]
+            msg_id = status_obj["id"]
+            status_type = status_obj["status"]
+            c.execute("UPDATE messages SET status = ? WHERE msg_id = ?", (status_type, msg_id))
+            conn.commit()
+
+        elif "messages" in value:
+            msg = value["messages"][0]
+            phone = msg["from"]
+            text = msg["text"]["body"]
+            msg_id = msg["id"]
+
+            c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+            c.execute("""
+            INSERT OR IGNORE INTO messages (msg_id, phone, message, sender, status)
+            VALUES (?, ?, ?, 'them', 'read')
+            """, (msg_id, phone, text))
+            conn.commit()
+
         conn.close()
-    except:
-        pass
+    except Exception as e:
+        print("Webhook Error:", e)
 
     return "ok", 200
 
