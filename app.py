@@ -153,24 +153,21 @@ def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
-    # إرسال واتساب
     send_message(phone, message)
 
-    # حفظ الرسالة
     conn = db()
     c = conn.cursor()
 
     c.execute("""
-    INSERT INTO messages
-    (phone, message)
-
+    INSERT INTO messages (phone, message)
     VALUES (?,?)
     """, (phone, message))
 
     conn.commit()
     conn.close()
 
-    return "sent"
+    # يرجعك للشات بدل sent
+    return render_template("chat.html")
 
 # ================= WEBHOOK =================
 
