@@ -18,13 +18,11 @@ def db():
 def init_db():
     conn = db()
     c = conn.cursor()
-    # جدول المستخدمين لجهات الاتصال (يمنع التكرار بوجود PRIMARY KEY)
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         phone TEXT PRIMARY KEY
     )
     """)
-    # جدول الرسائل ويحتوي على حقل sender لمعرفة من أرسل الرسالة
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +62,6 @@ def chat():
     return render_template("chat.html", users=users)
 
 # ================= GET USERS (API) =================
-# هذا المسار الجديد يغذي القائمة الجانبية بالبيانات تلقائياً في الخلفية
 @app.route("/api/users")
 def get_users():
     conn = db()
@@ -73,6 +70,21 @@ def get_users():
     users = c.fetchall()
     conn.close()
     return jsonify({"users": [dict(u) for u in users]})
+
+# ================= ADD NEW USER MANUALLY =================
+# هذا المسار يسمح لك بإضافة رقم هاتف جديد من لوحة التحكم مباشرة دون تكرار
+@app.route("/api/add_user", methods=["POST"])
+def add_user():
+    phone = request.form.get("phone", "").strip()
+    if not phone:
+        return jsonify({"status": "error", "message": "الرقم مطلوب"}), 400
+    
+    conn = db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "phone": phone})
 
 # ================= GET MESSAGES =================
 @app.route("/messages/<phone>")
@@ -94,16 +106,11 @@ def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
-    # إرسال الرسالة إلى الواتساب
     send_message(phone, message)
 
     conn = db()
     c = conn.cursor()
-    
-    # في حال قمت ببدء محادثة من رقم لم يراسلنا من قبل، يضاف تلقائياً لجهات الاتصال وبدون تكرار
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-    
-    # حفظ الرسالة مع تحديد أن المرسل هو أنا 'me'
     c.execute("""
     INSERT INTO messages (phone, message, sender)
     VALUES (?, ?, 'me')
@@ -129,16 +136,11 @@ def webhook():
 
         conn = db()
         c = conn.cursor()
-        
-        # عند استقبال أي رسالة جديدة، يتم حفظ الرقم تلقائياً، والـ IGNORE تمنع التكرار
         c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-        
-        # حفظ الرسالة القادمة وتحديد المرسل الخارجي 'them'
         c.execute("""
         INSERT INTO messages (phone, message, sender)
         VALUES (?, ?, 'them')
         """, (phone, text))
-        
         conn.commit()
         conn.close()
     except:
