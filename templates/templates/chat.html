@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>WhatsApp Chat</title>
+
+<style>
+
+body{
+    margin:0;
+    font-family:Arial;
+    background:#0b141a;
+    color:white;
+}
+
+.sidebar{
+    width:30%;
+    height:100vh;
+    background:#111b21;
+    float:left;
+    overflow:auto;
+}
+
+.chat{
+    width:70%;
+    height:100vh;
+    float:left;
+    background:#222e35;
+    display:flex;
+    flex-direction:column;
+}
+
+.user{
+    padding:15px;
+    border-bottom:1px solid #222;
+    cursor:pointer;
+}
+
+.user:hover{
+    background:#202c33;
+}
+
+.messages{
+    flex:1;
+    padding:20px;
+    overflow:auto;
+}
+
+.msg{
+    background:#005c4b;
+    padding:10px;
+    margin:10px;
+    border-radius:10px;
+    width:max-content;
+    max-width:60%;
+}
+
+.bottom{
+    padding:10px;
+    background:#111b21;
+}
+
+input{
+    width:80%;
+    padding:10px;
+    border:none;
+    border-radius:10px;
+}
+
+button{
+    padding:10px;
+    border:none;
+    background:#00a884;
+    color:white;
+    border-radius:10px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- USERS -->
+
+<div class="sidebar">
+
+<h2 style="padding:15px">Chats</h2>
+
+{% for u in users %}
+
+<div class="user">
+
+{{ u['phone'] }}
+
+</div>
+
+{% endfor %}
+
+</div>
+
+<!-- CHAT -->
+
+<div class="chat">
+
+<div class="messages">
+
+<div class="msg">
+السلام عليكم 👋
+</div>
+
+<div class="msg">
+هذه واجهة دردشة واتساب
+</div>
+
+</div>
+
+<div class="bottom">
+
+<input placeholder="اكتب رسالة">
+
+<button>إرسال</button>
+
+</div>
+
+</div>
+
+</body>
+</html>
