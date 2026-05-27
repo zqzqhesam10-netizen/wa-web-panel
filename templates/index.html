@@ -2,40 +2,52 @@
 <html>
 
 <head>
-
 <meta charset="UTF-8">
-
 <title>Netflix Clone</title>
 
-<link rel="stylesheet" href="/static/style.css">
+<style>
+
+body{
+    background:#111;
+    color:white;
+    font-family:Arial;
+}
+
+.card{
+    width:220px;
+    background:#222;
+    border-radius:10px;
+    overflow:hidden;
+    margin:20px;
+}
+
+.card img{
+    width:100%;
+}
+
+.info{
+    padding:10px;
+}
+
+</style>
 
 </head>
 
 <body>
 
-<div class="topbar">
-    <h1>🎬 Netflix Clone</h1>
-</div>
-
-<div class="container">
-
-{% for i in items %}
+<h1>🎬 Netflix Clone</h1>
 
 <div class="card">
 
-    <img src="{{ i['image'] }}">
+<img src="https://upload.wikimedia.org/wikipedia/en/7/70/Attack_on_Titan_S1_DVD.jpg">
 
-    <div class="info">
+<div class="info">
 
-        <h3>{{ i['title'] }}</h3>
+<h3>Attack on Titan</h3>
 
-        <p>{{ i['category'] }}</p>
-
-    </div>
+<p>Anime</p>
 
 </div>
-
-{% endfor %}
 
 </div>
 
