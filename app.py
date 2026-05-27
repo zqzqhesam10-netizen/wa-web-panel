@@ -1,95 +1,79 @@
 from flask import Flask, request, jsonify, render_template
 import requests
 import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
 
-# 🔐 إعدادات WhatsApp Cloud API
 VERIFY_TOKEN = "mytoken123"
 PHONE_NUMBER_ID = "1156014094256129"
 ACCESS_TOKEN = "EAAjZAQBZBWhDQBRvhhf97owU0uUDcmJkqcsNbBPZC7fnCXRw7q57njtrShlZCQN9RCYZB5TZCmL0viOWTxNcdaYDP4p8L8LOSDqDryVba06ZCaNjZCXyBOwCoZBLkHzzg6ZADZBX8I2ZC1XoOyPGAV5VITC5mBPXJTpiN2XHh0VZBTNQKs62d1wqg5ZAos1ZCSJx5yaVOiCiFLsw39QpLBZCnRxk6YtusnTw8ZA2CJHbZCF8BCLSz2rHsoqM1kMzpNBsf9ZAceXZAp3RlR8sEPziiND0HVhtZCZCtiBwZDZD"
 
-# =========================
-# 🗄️ قاعدة البيانات
-# =========================
-def init_db():
+# ================= DB =================
+def db():
     conn = sqlite3.connect("chat.db")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init():
+    conn = db()
     c = conn.cursor()
+
     c.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            phone TEXT,
-            message TEXT
-        )
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone TEXT,
+        message TEXT,
+        direction TEXT,
+        time TEXT
+    )
     """)
+
     conn.commit()
     conn.close()
 
-init_db()
+init()
 
-# =========================
-# 🟢 الصفحة الرئيسية (واجهة واتساب)
-# =========================
+# ================= UI =================
 @app.route("/")
 def home():
     return render_template("index.html")
 
-# =========================
-# 🟢 Webhook Verification (GET)
-# =========================
+# ================= VERIFY =================
 @app.route("/webhook", methods=["GET"])
 def verify():
-    mode = request.args.get("hub.mode")
-    token = request.args.get("hub.verify_token")
-    challenge = request.args.get("hub.challenge")
-
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        return challenge, 200
-
+    if request.args.get("hub.verify_token") == VERIFY_TOKEN:
+        return request.args.get("hub.challenge")
     return "error", 403
 
-# =========================
-# 🟢 استقبال الرسائل (POST)
-# =========================
+# ================= RECEIVE =================
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
         data = request.json
-
         msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
+
         phone = msg["from"]
         text = msg["text"]["body"]
 
-        conn = sqlite3.connect("chat.db")
+        conn = db()
         c = conn.cursor()
-        c.execute("INSERT INTO messages (phone, message) VALUES (?,?)", (phone, text))
+
+        c.execute("""
+        INSERT INTO messages (phone, message, direction, time)
+        VALUES (?, ?, 'in', ?)
+        """, (phone, text, str(datetime.now())))
+
         conn.commit()
         conn.close()
 
-        print(phone, text)
-
     except Exception as e:
-        print("Error:", e)
+        print("ERR:", e)
 
-    return "ok", 200
+    return "ok"
 
-# =========================
-# 🟢 عرض الرسائل
-# =========================
-@app.route("/messages")
-def messages():
-    conn = sqlite3.connect("chat.db")
-    c = conn.cursor()
-    c.execute("SELECT phone, message FROM messages ORDER BY id DESC")
-    data = c.fetchall()
-    conn.close()
-
-    return jsonify(data)
-
-# =========================
-# 🟢 إرسال رسالة
-# =========================
-def send_message(to, message):
+# ================= SEND =================
+def send_message(phone, message):
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
     headers = {
@@ -99,7 +83,7 @@ def send_message(to, message):
 
     data = {
         "messaging_product": "whatsapp",
-        "to": to,
+        "to": phone,
         "type": "text",
         "text": {"body": message}
     }
@@ -108,15 +92,37 @@ def send_message(to, message):
 
 @app.route("/send", methods=["POST"])
 def send():
-    phone = request.json.get("phone")
-    message = request.json.get("message")
+    phone = request.json["phone"]
+    message = request.json["message"]
 
-    result = send_message(phone, message)
+    send_message(phone, message)
 
-    return jsonify({"status": "sent", "result": result})
+    conn = db()
+    c = conn.cursor()
 
-# =========================
-# 🟢 تشغيل السيرفر
-# =========================
+    c.execute("""
+    INSERT INTO messages (phone, message, direction, time)
+    VALUES (?, ?, 'out', ?)
+    """, (phone, message, str(datetime.now())))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
+
+# ================= GET CHATS =================
+@app.route("/messages")
+def messages():
+    conn = db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM messages ORDER BY id DESC")
+    rows = c.fetchall()
+
+    conn.close()
+
+    return jsonify([dict(r) for r in rows])
+
+# ================= RUN =================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
