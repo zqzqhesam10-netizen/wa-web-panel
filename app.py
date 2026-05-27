@@ -23,7 +23,7 @@ def init_db():
         phone TEXT PRIMARY KEY
     )
     """)
-    # إضافة حقلين جديدين: msg_id (لمعرفة الرسالة وتحديث حالتها) و status (لحالة التسليم والقراءة)
+    # تم تحديث الجدول لدعم معرّف الرسالة وحالة التسليم/القراءة والتمييز بين مرسل ومستقبل
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,14 +55,13 @@ def send_message(phone, message):
     try:
         response = requests.post(url, headers=headers, json=data)
         res_data = response.json()
-        # إرجاع معرّف الرسالة القادم من فيسبوك لربطه بالحالة لاحقاً
         if "messages" in res_data:
-            return res_data["messages"][0]["id"]
+            return res_data["messages"][0]["id"] # إرجاع معرّف الرسالة لربطه بالحالة
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"Error sending: {e}")
     return None
 
-# ================= ROUTES =================
+# ================= CHAT PAGE =================
 @app.route("/chat")
 def chat():
     conn = db()
@@ -72,6 +71,7 @@ def chat():
     conn.close()
     return render_template("chat.html", users=users)
 
+# ================= GET USERS API =================
 @app.route("/api/users")
 def get_users():
     conn = db()
@@ -81,6 +81,45 @@ def get_users():
     conn.close()
     return jsonify({"users": [dict(u) for u in users]})
 
+# ================= ADD NEW USER API (تفعيل زر إضافة رقم) =================
+@app.route("/api/add_user", methods=["POST"])
+def add_user():
+    phone = request.form.get("phone", "").strip()
+    if not phone:
+        return jsonify({"status": "error", "message": "الرقم مطلوب"}), 400
+    
+    conn = db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "phone": phone})
+
+# ================= BROADCAST API (تفعيل زر إرسال للجميع) =================
+@app.route("/api/broadcast", methods=["POST"])
+def broadcast():
+    message = request.form.get("message", "").strip()
+    if not message:
+        return jsonify({"status": "error", "message": "الرسالة فارغة"}), 400
+
+    conn = db()
+    c = conn.cursor()
+    c.execute("SELECT phone FROM users")
+    users = c.fetchall()
+
+    for user in users:
+        phone = user["phone"]
+        wamid = send_message(phone, message)
+        c.execute("""
+        INSERT INTO messages (msg_id, phone, message, sender, status)
+        VALUES (?, ?, ?, 'me', 'sent')
+        """, (wamid, phone, message))
+        
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "sent_count": len(users)})
+
+# ================= GET MESSAGES =================
 @app.route("/messages/<phone>")
 def messages(phone):
     conn = db()
@@ -90,30 +129,27 @@ def messages(phone):
     conn.close()
     return jsonify({"messages": [dict(m) for m in msgs]})
 
+# ================= SEND MESSAGE =================
 @app.route("/send", methods=["POST"])
 def send():
     phone = request.form["phone"]
     message = request.form["message"]
 
-    # إرسال الرسالة وجلب الـ ID الخاص بها من فيسبوك
     wamid = send_message(phone, message)
 
     conn = db()
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-    
-    # حفظ الرسالة مع معرّفها الخاص لمراقبة حالتها
     c.execute("""
     INSERT INTO messages (msg_id, phone, message, sender, status)
     VALUES (?, ?, ?, 'me', 'sent')
     """, (wamid, phone, message))
-    
     conn.commit()
     conn.close()
 
     return jsonify({"status": "ok", "message": message})
 
-# ================= WEBHOOK MUPDATING STATUS =================
+# ================= WEBHOOK (تحديث الحالات والرسائل القادمة) =================
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -128,19 +164,16 @@ def webhook():
         conn = db()
         c = conn.cursor()
 
-        # 1. إذا كان التحديث عبارة عن تغيير في حالة الرسالة (استلم / قرأ)
+        # 1. تحديث حالة الرسالة المرسلة (delivered أو read)
         if "statuses" in value:
             status_obj = value["statuses"][0]
-            msg_id = status_obj["id"]      # معرف الرسالة
-            status_type = status_obj["status"]  # قد تكون delivered أو read
+            msg_id = status_obj["id"]
+            status_type = status_obj["status"]
 
-            # تحديث حالة الرسالة في قاعدة البيانات
-            c.execute("""
-            UPDATE messages SET status = ? WHERE msg_id = ?
-            """, (status_type, msg_id))
+            c.execute("UPDATE messages SET status = ? WHERE msg_id = ?", (status_type, msg_id))
             conn.commit()
 
-        # 2. إذا كان التحديث عبارة عن رسالة جديدة قادمة من العميل
+        # 2. استقبال الرسائل الجديدة من العملاء
         elif "messages" in value:
             msg = value["messages"][0]
             phone = msg["from"]
@@ -151,7 +184,7 @@ def webhook():
             c.execute("""
             INSERT OR IGNORE INTO messages (msg_id, phone, message, sender, status)
             VALUES (?, ?, ?, 'them', 'read')
-            """, (msg_id, phone, text, ))
+            """, (msg_id, phone, text))
             conn.commit()
 
         conn.close()
