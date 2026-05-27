@@ -37,10 +37,6 @@ body{
     cursor:pointer;
 }
 
-.user:hover{
-    background:#202c33;
-}
-
 .messages{
     flex:1;
     padding:15px;
@@ -53,7 +49,6 @@ body{
     margin:10px;
     border-radius:10px;
     width:max-content;
-    max-width:60%;
 }
 
 .bottom{
@@ -66,17 +61,14 @@ input{
     flex:1;
     padding:10px;
     border:none;
-    border-radius:10px;
 }
 
 button{
     margin-left:10px;
     padding:10px;
-    border:none;
     background:#00a884;
+    border:none;
     color:white;
-    border-radius:10px;
-    cursor:pointer;
 }
 
 </style>
@@ -85,7 +77,6 @@ button{
 
 <body>
 
-<!-- USERS -->
 <div class="sidebar">
 
 <h3 style="padding:10px">Chats</h3>
@@ -100,15 +91,14 @@ button{
 
 </div>
 
-<!-- CHAT -->
 <div class="chat">
 
 <div class="messages" id="messages"></div>
 
 <div class="bottom">
 
-<input id="phone" placeholder="رقم الهاتف">
-<input id="message" placeholder="اكتب رسالة">
+<input id="phone" placeholder="رقم">
+<input id="message" placeholder="رسالة">
 
 <button onclick="sendMsg()">إرسال</button>
 
@@ -156,9 +146,10 @@ function sendMsg(){
         },
         body: `phone=${phone}&message=${message}`
     })
+    .then(res => res.json())
     .then(() => {
 
-        // تحديث مباشر للشات
+        // 🔥 الحل الأساسي: تحديث فوري
         loadMessages();
 
         // مسح الرسالة فقط
