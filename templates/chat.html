@@ -5,15 +5,15 @@
 
 <meta charset="UTF-8">
 
-<title>WhatsApp Chat</title>
+<title>WhatsApp Panel</title>
 
 <style>
 
 body{
     margin:0;
-    font-family:Arial;
     background:#0b141a;
     color:white;
+    font-family:Arial;
 }
 
 .sidebar{
@@ -29,14 +29,11 @@ body{
     height:100vh;
     float:left;
     background:#222e35;
-    display:flex;
-    flex-direction:column;
 }
 
 .user{
     padding:15px;
     border-bottom:1px solid #222;
-    cursor:pointer;
 }
 
 .user:hover{
@@ -44,7 +41,7 @@ body{
 }
 
 .messages{
-    flex:1;
+    height:85vh;
     padding:20px;
     overflow:auto;
 }
@@ -52,8 +49,8 @@ body{
 .msg{
     background:#005c4b;
     padding:10px;
-    margin:10px;
     border-radius:10px;
+    margin:10px;
     width:max-content;
     max-width:60%;
 }
@@ -73,9 +70,9 @@ input{
 button{
     padding:10px;
     border:none;
+    border-radius:10px;
     background:#00a884;
     color:white;
-    border-radius:10px;
 }
 
 </style>
@@ -109,20 +106,24 @@ button{
 <div class="messages">
 
 <div class="msg">
-السلام عليكم 👋
-</div>
-
-<div class="msg">
-هذه واجهة دردشة واتساب
+مرحباً 👋
 </div>
 
 </div>
 
 <div class="bottom">
 
-<input placeholder="اكتب رسالة">
+<form action="/send" method="POST">
 
-<button>إرسال</button>
+<input name="phone" placeholder="رقم الهاتف">
+
+<input name="message" placeholder="اكتب رسالة">
+
+<button type="submit">
+إرسال
+</button>
+
+</form>
 
 </div>
 
