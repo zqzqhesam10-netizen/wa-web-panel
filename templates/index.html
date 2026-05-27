@@ -1,142 +1,131 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WhatsApp Panel</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial;
-            display: flex;
-            height: 100vh;
-        }
+<meta charset="utf-8">
+<title>WhatsApp Pro Panel</title>
 
-        .sidebar {
-            width: 30%;
-            background: #075E54;
-            color: white;
-            overflow-y: auto;
-        }
+<style>
+body{margin:0;font-family:Arial;display:flex;height:100vh;background:#0a1014;}
 
-        .chat {
-            width: 70%;
-            display: flex;
-            flex-direction: column;
-        }
+.sidebar{width:28%;background:#111b21;color:white;overflow-y:auto;}
+.chat{width:72%;display:flex;flex-direction:column;}
 
-        .header {
-            background: #128C7E;
-            padding: 10px;
-            color: white;
-        }
+.contact{padding:14px;border-bottom:1px solid #2a3942;cursor:pointer;}
+.contact:hover{background:#1f2c33;}
 
-        .messages {
-            flex: 1;
-            padding: 10px;
-            overflow-y: auto;
-            background: #ECE5DD;
-        }
+.header{padding:15px;background:#202c33;color:white;font-weight:bold;}
 
-        .input {
-            display: flex;
-        }
+.messages{flex:1;overflow-y:auto;padding:15px;background:#0a1014;}
 
-        input {
-            flex: 1;
-            padding: 10px;
-        }
+.msg{
+max-width:60%;
+padding:10px;
+margin:6px;
+border-radius:10px;
+color:white;
+}
 
-        button {
-            padding: 10px;
-            background: #128C7E;
-            color: white;
-            border: none;
-        }
+.in{background:#202c33;}
+.out{background:#005c4b;margin-left:auto;}
 
-        .contact {
-            padding: 10px;
-            border-bottom: 1px solid #0a7a66;
-            cursor: pointer;
-        }
+.input{display:flex;background:#202c33;}
+input{flex:1;padding:12px;border:none;outline:none;background:#2a3942;color:white;}
+button{padding:12px;background:#00a884;border:none;color:white;cursor:pointer;}
 
-        .msg {
-            background: white;
-            padding: 8px;
-            margin: 5px;
-            border-radius: 5px;
-        }
-    </style>
+.top{display:flex;padding:10px;background:#111b21;}
+.top input{padding:10px;width:100%;}
+</style>
 </head>
+
 <body>
 
 <div class="sidebar" id="contacts">
-    <h3 style="padding:10px;">Contacts</h3>
+<div style="padding:15px;font-weight:bold;">Chats</div>
 </div>
 
 <div class="chat">
-    <div class="header" id="chatHeader">Chat</div>
 
-    <div class="messages" id="messages"></div>
+<div class="header" id="header">Select Chat</div>
 
-    <div class="input">
-        <input id="msg" placeholder="Type message">
-        <button onclick="send()">Send</button>
-    </div>
+<div class="top">
+<input id="manual" placeholder="Enter phone number">
+</div>
+
+<div class="messages" id="messages"></div>
+
+<div class="input">
+<input id="msg" placeholder="Message...">
+<button onclick="send()">Send</button>
+</div>
+
 </div>
 
 <script>
-let current = "";
 
-async function loadContacts(){
-    let res = await fetch('/messages');
-    let data = await res.json();
+let current="";
 
-    let contacts = document.getElementById("contacts");
-    contacts.innerHTML = "<h3 style='padding:10px;'>Contacts</h3>";
+async function load(){
+let res=await fetch('/messages');
+let data=await res.json();
 
-    let unique = [...new Set(data.map(x => x[0]))];
+let contacts=document.getElementById("contacts");
+contacts.innerHTML="<div style='padding:15px;font-weight:bold;'>Chats</div>";
 
-    unique.forEach(p=>{
-        let div = document.createElement("div");
-        div.className = "contact";
-        div.innerText = p;
-        div.onclick = ()=>loadChat(p);
-        contacts.appendChild(div);
-    });
+let unique=[...new Set(data.map(x=>x.phone))];
+
+unique.forEach(p=>{
+let div=document.createElement("div");
+div.className="contact";
+div.innerText="📱 "+p;
+div.onclick=()=>openChat(p);
+contacts.appendChild(div);
+});
+
+if(unique.length && !current){
+openChat(unique[0]);
+}
 }
 
-async function loadChat(phone){
-    current = phone;
-    document.getElementById("chatHeader").innerText = phone;
+async function openChat(phone){
+current=phone;
+document.getElementById("header").innerText=phone;
 
-    let res = await fetch('/messages');
-    let data = await res.json();
+let res=await fetch('/messages');
+let data=await res.json();
 
-    let box = document.getElementById("messages");
-    box.innerHTML = "";
+let box=document.getElementById("messages");
+box.innerHTML="";
 
-    data.forEach(m=>{
-        if(m[0] == phone){
-            let div = document.createElement("div");
-            div.className = "msg";
-            div.innerText = m[1];
-            box.appendChild(div);
-        }
-    });
+data.filter(m=>m.phone==phone).forEach(m=>{
+let div=document.createElement("div");
+div.className="msg "+m.direction;
+div.innerText=m.message;
+box.appendChild(div);
+});
+
+box.scrollTop=box.scrollHeight;
 }
 
 async function send(){
-    let msg = document.getElementById("msg").value;
 
-    await fetch('/send',{
-        method:"POST",
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({phone:current,message:msg})
-    });
+let phone=document.getElementById("manual").value || current;
+let msg=document.getElementById("msg").value;
 
-    loadChat(current);
+if(!phone||!msg)return;
+
+await fetch('/send',{
+method:"POST",
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({phone,message:msg})
+});
+
+document.getElementById("msg").value="";
+openChat(phone);
 }
 
-setInterval(loadContacts,3000);
+setInterval(load,2000);
+load();
+
 </script>
 
 </body>
