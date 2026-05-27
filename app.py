@@ -271,10 +271,13 @@ def home():
     c.execute("""
     SELECT * FROM content
     ORDER BY id DESC
-    LIMIT 50
     """)
 
     items = c.fetchall()
+
+    conn.close()
+
+    return render_template("index.html", items=items)
 
     html = """
     <html>
