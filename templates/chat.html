@@ -5,22 +5,22 @@
 
 <meta charset="UTF-8">
 
-<title>WhatsApp Panel</title>
+<title>WhatsApp Web Clone</title>
 
 <style>
 
 body{
     margin:0;
+    font-family:Arial;
     background:#0b141a;
     color:white;
-    font-family:Arial;
 }
 
 .sidebar{
     width:30%;
     height:100vh;
-    background:#111b21;
     float:left;
+    background:#111b21;
     overflow:auto;
 }
 
@@ -28,12 +28,14 @@ body{
     width:70%;
     height:100vh;
     float:left;
-    background:#222e35;
+    display:flex;
+    flex-direction:column;
 }
 
 .user{
     padding:15px;
     border-bottom:1px solid #222;
+    cursor:pointer;
 }
 
 .user:hover{
@@ -41,27 +43,28 @@ body{
 }
 
 .messages{
-    height:85vh;
-    padding:20px;
+    flex:1;
+    padding:15px;
     overflow:auto;
 }
 
 .msg{
     background:#005c4b;
     padding:10px;
-    border-radius:10px;
     margin:10px;
+    border-radius:10px;
     width:max-content;
     max-width:60%;
 }
 
 .bottom{
+    display:flex;
     padding:10px;
     background:#111b21;
 }
 
 input{
-    width:80%;
+    flex:1;
     padding:10px;
     border:none;
     border-radius:10px;
@@ -69,10 +72,11 @@ input{
 
 button{
     padding:10px;
-    border:none;
-    border-radius:10px;
+    margin-left:10px;
     background:#00a884;
+    border:none;
     color:white;
+    border-radius:10px;
 }
 
 </style>
@@ -82,17 +86,14 @@ button{
 <body>
 
 <!-- USERS -->
-
 <div class="sidebar">
 
-<h2 style="padding:15px">Chats</h2>
+<h3 style="padding:10px">Chats</h3>
 
 {% for u in users %}
 
-<div class="user">
-
-{{ u['phone'] }}
-
+<div class="user" onclick="openChat('{{ u['phone'] }}')">
+    {{ u['phone'] }}
 </div>
 
 {% endfor %}
@@ -100,34 +101,70 @@ button{
 </div>
 
 <!-- CHAT -->
-
 <div class="chat">
 
-<div class="messages">
-
-<div class="msg">
-مرحباً 👋
-</div>
-
-</div>
+<div class="messages" id="messages"></div>
 
 <div class="bottom">
 
-<form action="/send" method="POST">
+<input id="phone" placeholder="رقم المستخدم">
+<input id="message" placeholder="اكتب رسالة">
 
-<input name="phone" placeholder="رقم الهاتف">
-
-<input name="message" placeholder="اكتب رسالة">
-
-<button type="submit">
-إرسال
-</button>
-
-</form>
+<button onclick="sendMsg()">إرسال</button>
 
 </div>
 
 </div>
+
+<script>
+
+let currentUser = "";
+
+function openChat(phone){
+    currentUser = phone;
+    document.getElementById("phone").value = phone;
+    loadMessages();
+}
+
+function loadMessages(){
+
+    if(!currentUser) return;
+
+    fetch("/messages/" + currentUser)
+    .then(r => r.json())
+    .then(data => {
+
+        let box = document.getElementById("messages");
+        box.innerHTML = "";
+
+        data.messages.forEach(m => {
+            box.innerHTML += `<div class="msg">${m.message}</div>`;
+        });
+
+    });
+}
+
+function sendMsg(){
+
+    let phone = document.getElementById("phone").value;
+    let message = document.getElementById("message").value;
+
+    fetch("/send", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: `phone=${phone}&message=${message}`
+    })
+
+    document.getElementById("message").value = "";
+
+    setTimeout(loadMessages, 500);
+}
+
+setInterval(loadMessages, 2000);
+
+</script>
 
 </body>
 </html>
