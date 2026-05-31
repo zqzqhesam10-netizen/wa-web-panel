@@ -4,9 +4,7 @@ import requests
 import os
 import threading
 import time
-import hashlib
-from bs4 import BeautifulSoup
-import imgkit
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -61,24 +59,15 @@ def save_state(data):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         f.write(data)
 
-# ================= SCRAPER =================
+# ================= SIMPLE SCRAPER =================
 def fetch_page():
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(TARGET_URL, headers=headers, timeout=20)
     return r.text
 
 
-def get_fingerprint(html):
-    soup = BeautifulSoup(html, "html.parser")
-    items = soup.find_all("div")[:20]
-    text = "".join([i.get_text() for i in items])
-    return hashlib.md5(text.encode()).hexdigest()
-
-# ================= SCREENSHOT =================
-def take_screenshot():
-    path = "shot.png"
-    imgkit.from_url(TARGET_URL, path)
-    return path
+def simple_fingerprint(html):
+    return str(hash(html[:2000]))
 
 # ================= WHATSAPP SEND =================
 def send_message(phone, message):
@@ -102,7 +91,7 @@ def send_message(phone, message):
 def check_updates():
     try:
         html = fetch_page()
-        new_fp = get_fingerprint(html)
+        new_fp = simple_fingerprint(html)
         old_fp = get_state()
 
         if new_fp != old_fp:
@@ -168,7 +157,10 @@ def send():
 
     conn = db()
     c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+    c.execute("""
+        INSERT INTO messages (phone, message, sender, msg_time)
+        VALUES (?, ?, 'me', ?)
+    """, (phone, message, datetime.now().strftime("%H:%M")))
     conn.commit()
     conn.close()
 
@@ -179,7 +171,7 @@ def send():
 def messages(phone):
     conn = db()
     c = conn.cursor()
-    c.execute("SELECT * FROM messages WHERE phone=?", (phone,))
+    c.execute("SELECT * FROM messages WHERE phone=? ORDER BY id ASC", (phone,))
     data = c.fetchall()
     conn.close()
     return jsonify({"messages": [dict(x) for x in data]})
