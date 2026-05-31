@@ -66,7 +66,7 @@ def send_message(phone, message):
         print("Send Error:", e)
     return None
 
-# ================= HTML CODE (FIXED LAYOUT) =================
+# ================= HTML CODE (WITH TEXT BUTTONS) =================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -74,30 +74,29 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>واتساب ويب - لوحة التحكم</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         body { display: flex; height: 100vh; background-color: #dadbd3; overflow: hidden; }
         
         .sidebar { width: 380px; min-width: 380px; background: #fff; display: flex; flex-direction: column; border-left: 1px solid #e9edef; }
         
-        /* إصلاح هيدر القائمة الجانبية وتوزيع الأزرار */
         .sidebar-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; justify-content: space-between; direction: rtl; }
         .header-right-side { display: flex; align-items: center; gap: 10px; }
-        .avatar { width: 40px; height: 40px; background: #dfe5e7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #54656f; font-size: 20px; }
+        .avatar { width: 40px; height: 40px; background: #dfe5e7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #54656f; font-weight: bold; font-size: 14px; }
         
-        .header-actions { display: flex; align-items: center; gap: 18px; margin-right: auto; } /* سحب الأزرار لليسار تماماً */
-        .btn-action { background: transparent; border: none; color: #54656f; font-size: 20px; cursor: pointer; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
-        .btn-action:hover { background-color: rgba(0, 0, 0, 0.08); }
-        .btn-action.broadcast-btn { color: #0284c7; }
-        .btn-action.broadcast-btn:hover { background-color: rgba(2, 132, 199, 0.1); }
+        /* أزرار نصية واضحة ومباشرة تجبر المتصفح على إظهارها رغماً عنه */
+        .header-actions { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+        .text-btn { border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; color: white; display: inline-flex; align-items: center; justify-content: center; transition: opacity 0.2s; }
+        .text-btn:hover { opacity: 0.9; }
+        .text-btn.broadcast { background-color: #0284c7; }
+        .text-btn.new-chat { background-color: #00a884; }
 
         .search-box { padding: 8px 12px; background: #fff; border-bottom: 1px solid #f0f2f5; }
         .search-inner { background: #f0f2f5; border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 10px; color: #667781; }
         .search-inner input { background: transparent; border: none; outline: none; width: 100%; font-size: 14px; color: #111b21; }
         
         .user-list { flex: 1; overflow-y: auto; background: #fff; }
-        .user-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f2f5; transition: 0.2s; height: 72px; }
+        .user-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f2f5; height: 72px; }
         .user-item:hover { background: #f5f6f6; }
         .user-item.active { background: #eaebeb; }
         .user-info { margin-right: 15px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
@@ -118,15 +117,13 @@ HTML_TEMPLATE = """
 
         .meta-container { align-self: flex-end; display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 11px; color: #8696a0; user-select: none; }
         .meta-container .time-text { font-size: 10.5px; }
-        .meta-container .fa-check-double.read { color: #53bdeb; }
 
         .input-area { height: 62px; background: #f0f2f5; display: flex; align-items: center; padding: 5px 15px; }
         .input-area form { display: flex; width: 100%; gap: 10px; align-items: center; }
         .input-box { flex: 1; background: #fff; border-radius: 8px; padding: 10px 15px; border: none; outline: none; font-size: 15px; }
-        .btn-send { background: transparent; border: none; color: #54656f; font-size: 22px; cursor: pointer; padding: 0 5px; }
+        .btn-send { background: #00a884; border: none; color: white; font-size: 14px; font-weight: bold; cursor: pointer; padding: 10px 20px; border-radius: 6px; }
 
         .welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; background: #f8f9fa; color: #667781; text-align: center; border-bottom: 6px solid #00a884; padding: 20px; }
-        .welcome-screen i { font-size: 80px; color: #ced5d8; margin-bottom: 20px; }
         .welcome-screen h2 { color: #41525d; font-weight: 300; margin-bottom: 10px; font-size: 32px; }
 
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 999; }
@@ -170,19 +167,18 @@ HTML_TEMPLATE = """
     <div class="sidebar">
         <div class="sidebar-header">
             <div class="header-right-side">
-                <div class="avatar"><i class="fas fa-user"></i></div>
-                <span style="font-weight: bold; color: #111b21; margin-right: 5px;">محادثات الواتساب</span>
+                <div class="avatar">WA</div>
+                <span style="font-weight: bold; color: #111b21; margin-right: 5px;">المحادثات</span>
             </div>
             <div class="header-actions">
-                <button class="btn-action broadcast-btn" title="إرسال رسالة جماعية للكل" onclick="openBroadcastModal()"><i class="fas fa-bullhorn"></i></button>
-                <button class="btn-action" title="بدء محادثة / إضافة رقم" onclick="openNewChatModal()"><i class="fas fa-comment-medical"></i></button>
+                <button class="text-btn broadcast" onclick="openBroadcastModal()">📢 بث للكل</button>
+                <button class="text-btn new-chat" onclick="openNewChatModal()">➕ رقم جديد</button>
             </div>
         </div>
         
         <div class="search-box">
             <div class="search-inner">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" placeholder="البحث أو بدء دردشة جديدة" oninput="filterUsers()">
+                <input type="text" id="searchInput" placeholder="البحث عن دردشة..." oninput="filterUsers()">
             </div>
         </div>
         
@@ -191,7 +187,7 @@ HTML_TEMPLATE = """
 
     <div class="chat-area" id="chatArea" style="display: none;">
         <div class="chat-header">
-            <div class="avatar" style="margin-left: 15px;"><i class="fas fa-user"></i></div>
+            <div class="avatar" style="margin-left: 15px;">User</div>
             <div>
                 <div class="user-name" id="currentChatUser">جاري التحميل...</div>
                 <div style="font-size: 12px; color: #667781;">متصل الآن</div>
@@ -204,15 +200,14 @@ HTML_TEMPLATE = """
             <form id="sendForm" onsubmit="sendMessage(event)">
                 <input type="hidden" id="activePhone">
                 <input type="text" id="messageInput" class="input-box" placeholder="اكتب رسالتك هنا..." autocomplete="off" required>
-                <button type="submit" class="btn-send"><i class="fas fa-paper-plane"></i></button>
+                <button type="submit" class="btn-send">إرسال</button>
             </form>
         </div>
     </div>
 
     <div class="welcome-screen" id="welcomeScreen">
-        <i class="fab fa-whatsapp"></i>
         <h2>واتساب ويب للمسؤول</h2>
-        <p>اضغط على الأزرار في الأعلى لإضافة أرقام وبدء المراسلة أو عمل برودكاست جماعي.</p>
+        <p>استخدم أزرار [بث للكل] و [رقم جديد] في القائمة الجانبية لبدء التحكم والعمل المباشر.</p>
     </div>
 
     <script>
@@ -241,7 +236,7 @@ HTML_TEMPLATE = """
                 const isActive = user.phone === currentPhone ? 'active' : '';
                 htmlContent += `
                     <div class="user-item ${isActive}" onclick="openChat('${user.phone}', this)">
-                        <div class="avatar"><i class="fas fa-user-circle" style="font-size: 38px; color: #dfe5e7;"></i></div>
+                        <div class="avatar">💬</div>
                         <div class="user-info">
                             <div class="user-name">${user.phone}</div>
                             <div class="user-status">اضغط لعرض الدردشة...</div>
@@ -318,18 +313,11 @@ HTML_TEMPLATE = """
                     data.messages.forEach(msg => {
                         const row = document.createElement('div');
                         row.className = `msg-row ${msg.sender === 'me' ? 'me' : 'them'}`;
-                        let iconHtml = "";
-                        if(msg.sender === 'me') {
-                            if(msg.status === 'sent') iconHtml = `<i class="fas fa-check"></i>`;
-                            else if(msg.status === 'delivered') iconHtml = `<i class="fas fa-check-double"></i>`;
-                            else if(msg.status === 'read') iconHtml = `<i class="fas fa-check-double read"></i>`;
-                        }
                         row.innerHTML = `
                             <div class="bubble">
                                 <span>${msg.message}</span>
                                 <div class="meta-container">
                                     <span class="time-text">${msg.msg_time || ''}</span>
-                                    ${iconHtml}
                                 </div>
                             </div>
                         `;
