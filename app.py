@@ -3,6 +3,11 @@ import sqlite3
 import requests
 import os
 from datetime import datetime
+import threading
+import time
+import hashlib
+from bs4 import BeautifulSoup
+import imgkit
 
 app = Flask(__name__)
 
@@ -11,11 +16,15 @@ ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZA
 PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
 
+TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
+STATE_FILE = "state.txt"
+
 # ================= DB =================
 def db():
     conn = sqlite3.connect("chat.db")
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     conn = db()
@@ -42,31 +51,133 @@ def init_db():
 
 init_db()
 
-# ================= SEND MESSAGE =================
+# ================= STATE =================
+def get_state():
+    if not os.path.exists(STATE_FILE):
+        return ""
+    return open(STATE_FILE, "r", encoding="utf-8").read()
+
+
+def save_state(data):
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        f.write(data)
+
+# ================= SCRAPER =================
+def fetch_page():
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(TARGET_URL, headers=headers, timeout=20)
+    return r.text
+
+
+def get_fingerprint(html):
+    soup = BeautifulSoup(html, "html.parser")
+    items = soup.find_all("div")[:20]
+    text = "".join([i.get_text() for i in items])
+    return hashlib.md5(text.encode()).hexdigest()
+
+# ================= SCREENSHOT =================
+def take_screenshot():
+    path = "shot.png"
+    options = {
+        'format': 'png',
+        'width': 1280,
+        'height': 720
+    }
+    imgkit.from_url(TARGET_URL, path, options=options)
+    return path
+
+# ================= WHATSAPP IMAGE =================
+def send_image(phone, image_path, caption=""):
+    url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+
+    headers = {
+        "Authorization": f"Bearer {ACCESS_TOKEN}"
+    }
+
+    with open(image_path, "rb") as f:
+        upload = requests.post(
+            f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/media",
+            headers=headers,
+            files={"file": f},
+            data={"messaging_product": "whatsapp"}
+        ).json()
+
+    media_id = upload.get("id")
+
+    data = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "image",
+        "image": {
+            "id": media_id,
+            "caption": caption
+        }
+    }
+
+    requests.post(url, headers=headers, json=data)
+
+# ================= MONITOR =================
+def check_updates():
+    try:
+        html = fetch_page()
+        new_fp = get_fingerprint(html)
+        old_fp = get_state()
+
+        if new_fp != old_fp:
+            print("🔥 New update detected!")
+
+            save_state(new_fp)
+
+            shot = take_screenshot()
+
+            conn = db()
+            c = conn.cursor()
+            c.execute("SELECT phone FROM users")
+            users = [u["phone"] for u in c.fetchall()]
+            conn.close()
+
+            for phone in users:
+                send_image(phone, shot, "🔥 تم اكتشاف إضافة جديدة")
+
+    except Exception as e:
+        print("Monitor error:", e)
+
+# ================= LOOP (IMPORTANT) =================
+def loop():
+    while True:
+        check_updates()
+        time.sleep(180)  # كل 3 دقائق
+
+# ================= SEND TEXT =================
 def send_message(phone, message):
     clean_phone = str(phone).replace("+", "").strip()
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+
     headers = {
         "Authorization": f"Bearer {ACCESS_TOKEN}",
         "Content-Type": "application/json"
     }
+
     data = {
         "messaging_product": "whatsapp",
         "to": clean_phone,
         "type": "text",
         "text": {"body": message}
     }
-    try:
-        r = requests.post(url, headers=headers, json=data)
-        res = r.json()
-        print("SEND RESPONSE:", res)
-        if "messages" in res:
-            return res["messages"][0]["id"]
-    except Exception as e:
-        print("Send Error:", e)
+
+    r = requests.post(url, headers=headers, json=data)
+    res = r.json()
+
+    if "messages" in res:
+        return res["messages"][0]["id"]
+
     return None
 
-# ================= HTML CODE (WITH TEXT BUTTONS) =================
+# ================= START MONITOR THREAD =================
+def start_monitor():
+    threading.Thread(target=loop, daemon=True).start()
+
+# ================= HTML =================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -344,12 +455,12 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
-
 # ================= ROUTES =================
 @app.route("/")
 @app.route("/chat")
 def chat_panel():
     return render_template_string(HTML_TEMPLATE)
+
 
 @app.route("/api/users")
 def get_users():
@@ -360,11 +471,10 @@ def get_users():
     conn.close()
     return jsonify({"users": [dict(u) for u in users]})
 
+
 @app.route("/api/add_user", methods=["POST"])
 def add_user():
     phone = request.form.get("phone", "").strip()
-    if not phone:
-        return jsonify({"status": "error"}), 400
     conn = db()
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
@@ -372,28 +482,22 @@ def add_user():
     conn.close()
     return jsonify({"status": "ok"})
 
-@app.route("/api/broadcast", methods=["POST"])
-def broadcast():
-    message = request.form.get("message", "").strip()
-    if not message:
-        return jsonify({"status": "error"}), 400
+
+@app.route("/send", methods=["POST"])
+def send():
+    phone = request.form["phone"]
+    message = request.form["message"]
+
+    send_message(phone, message)
+
     conn = db()
     c = conn.cursor()
-    c.execute("SELECT phone FROM users")
-    users = c.fetchall()
-    sent_count = 0
-    now_time = datetime.now().strftime("%I:%M %p")
-    for user in users:
-        phone = user["phone"]
-        wamid = send_message(phone, message)
-        c.execute("""
-        INSERT OR IGNORE INTO messages (msg_id, phone, message, sender, status, msg_time)
-        VALUES (?, ?, ?, 'me', 'sent', ?)
-        """, (wamid, phone, message, now_time))
-        sent_count += 1
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
     conn.commit()
     conn.close()
-    return jsonify({"status": "ok", "sent_count": sent_count})
+
+    return jsonify({"status": "ok"})
+
 
 @app.route("/messages/<phone>")
 def messages(phone):
@@ -404,51 +508,20 @@ def messages(phone):
     conn.close()
     return jsonify({"messages": [dict(m) for m in msgs]})
 
-@app.route("/send", methods=["POST"])
-def send():
-    phone = request.form["phone"]
-    message = request.form["message"]
-    wamid = send_message(phone, message)
-    now_time = datetime.now().strftime("%I:%M %p")
-    conn = db()
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-    c.execute("""
-    INSERT INTO messages (msg_id, phone, message, sender, status, msg_time) 
-    VALUES (?, ?, ?, 'me', 'sent', ?)
-    """, (wamid, phone, message, now_time))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok"})
 
+# ================= WEBHOOK =================
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        if request.args.get("hub.mode") == "subscribe" and request.args.get("hub.verify_token") == VERIFY_TOKEN:
-            return request.args.get("hub.challenge"), 200
+        if request.args.get("hub.verify_token") == VERIFY_TOKEN:
+            return request.args.get("hub.challenge")
         return "error", 403
-    try:
-        data = request.json
-        value = data["entry"][0]["changes"][0]["value"]
-        if "messages" in value:
-            msg = value["messages"][0]
-            phone = msg["from"]
-            text = msg.get("text", {}).get("body", "[وسائط]")
-            msg_id = msg["id"]
-            now_time = datetime.now().strftime("%I:%M %p")
-            conn = db()
-            c = conn.cursor()
-            c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-            c.execute("""
-            INSERT OR IGNORE INTO messages (msg_id, phone, message, sender, status, msg_time) 
-            VALUES (?, ?, ?, 'them', 'read', ?)
-            """, (msg_id, phone, text, now_time))
-            conn.commit()
-            conn.close()
-    except Exception as e:
-        print("Webhook Error:", e)
+
     return "ok", 200
 
+
+# ================= MAIN =================
 if __name__ == "__main__":
+    start_monitor()   # 🔥 تشغيل المراقبة
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
