@@ -66,7 +66,7 @@ def send_message(phone, message):
         print("Send Error:", e)
     return None
 
-# ================= HTML CODE (MAPPED FROM YOUR FILE) =================
+# ================= HTML CODE (FIXED LAYOUT) =================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -76,28 +76,33 @@ HTML_TEMPLATE = """
     <title>واتساب ويب - لوحة التحكم</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { display: flex; height: 100vh; background-color: #dadbd3; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { display: flex; height: 100vh; background-color: #dadbd3; overflow: hidden; }
         
-        .sidebar { width: 350px; background: #fff; display: flex; flex-direction: column; border-left: 1px solid #e9edef; }
-        .sidebar-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; justify-content: space-between; }
+        .sidebar { width: 380px; min-width: 380px; background: #fff; display: flex; flex-direction: column; border-left: 1px solid #e9edef; }
+        
+        /* إصلاح هيدر القائمة الجانبية وتوزيع الأزرار */
+        .sidebar-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; justify-content: space-between; direction: rtl; }
+        .header-right-side { display: flex; align-items: center; gap: 10px; }
         .avatar { width: 40px; height: 40px; background: #dfe5e7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #54656f; font-size: 20px; }
         
-        .header-actions { display: flex; align-items: center; gap: 12px; }
-        .btn-action { background: transparent; border: none; color: #54656f; font-size: 18px; cursor: pointer; padding: 5px; }
-        .btn-action:hover { color: #00a884; }
+        .header-actions { display: flex; align-items: center; gap: 18px; margin-right: auto; } /* سحب الأزرار لليسار تماماً */
+        .btn-action { background: transparent; border: none; color: #54656f; font-size: 20px; cursor: pointer; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+        .btn-action:hover { background-color: rgba(0, 0, 0, 0.08); }
+        .btn-action.broadcast-btn { color: #0284c7; }
+        .btn-action.broadcast-btn:hover { background-color: rgba(2, 132, 199, 0.1); }
 
         .search-box { padding: 8px 12px; background: #fff; border-bottom: 1px solid #f0f2f5; }
         .search-inner { background: #f0f2f5; border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 10px; color: #667781; }
-        .search-inner input { background: transparent; border: none; outline: none; width: 100%; font-size: 14px; }
+        .search-inner input { background: transparent; border: none; outline: none; width: 100%; font-size: 14px; color: #111b21; }
         
-        .user-list { flex: 1; overflow-y: auto; }
-        .user-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f2f5; transition: 0.2s; }
-        .user-item:hover { background: #f0f2f5; }
+        .user-list { flex: 1; overflow-y: auto; background: #fff; }
+        .user-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f2f5; transition: 0.2s; height: 72px; }
+        .user-item:hover { background: #f5f6f6; }
         .user-item.active { background: #eaebeb; }
-        .user-info { margin-right: 15px; flex: 1; }
-        .user-name { font-weight: 500; color: #111b21; font-size: 16px; }
-        .user-status { font-size: 13px; color: #667781; margin-top: 2px; }
+        .user-info { margin-right: 15px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        .user-name { font-weight: 500; color: #111b21; font-size: 16px; text-align: right; }
+        .user-status { font-size: 13px; color: #667781; margin-top: 4px; text-align: right; }
 
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2 url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-repeat: repeat; }
         .chat-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #e9edef; }
@@ -107,33 +112,34 @@ HTML_TEMPLATE = """
         .msg-row.me { justify-content: flex-start; } 
         .msg-row.them { justify-content: flex-end; }
         
-        .bubble { max-width: 65%; padding: 6px 10px 4px 10px; border-radius: 8px; font-size: 14.5px; line-height: 1.4; position: relative; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); word-wrap: break-word; display: flex; flex-direction: column; }
-        .msg-row.me .bubble { background: #d9fdd3; color: #111b21; border-top-right-radius: 0; }
-        .msg-row.them .bubble { background: #ffffff; color: #111b21; border-top-left-radius: 0; }
+        .bubble { max-width: 65%; padding: 6px 12px; border-radius: 8px; font-size: 14.5px; line-height: 1.4; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); word-wrap: break-word; display: flex; flex-direction: column; }
+        .msg-row.me .bubble { background: #d9fdd3; color: #111b21; }
+        .msg-row.them .bubble { background: #ffffff; color: #111b21; }
 
         .meta-container { align-self: flex-end; display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 11px; color: #8696a0; user-select: none; }
         .meta-container .time-text { font-size: 10.5px; }
         .meta-container .fa-check-double.read { color: #53bdeb; }
 
-        .input-area { height: 62px; background: #f0f2f5; display: flex; align-items: center; padding: 5px 15px; gap: 10px; }
+        .input-area { height: 62px; background: #f0f2f5; display: flex; align-items: center; padding: 5px 15px; }
         .input-area form { display: flex; width: 100%; gap: 10px; align-items: center; }
         .input-box { flex: 1; background: #fff; border-radius: 8px; padding: 10px 15px; border: none; outline: none; font-size: 15px; }
         .btn-send { background: transparent; border: none; color: #54656f; font-size: 22px; cursor: pointer; padding: 0 5px; }
 
-        .welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; background: #f8f9fa; color: #667781; text-align: center; border-bottom: 6px solid #00a884; }
+        .welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; background: #f8f9fa; color: #667781; text-align: center; border-bottom: 6px solid #00a884; padding: 20px; }
         .welcome-screen i { font-size: 80px; color: #ced5d8; margin-bottom: 20px; }
-        .welcome-screen h2 { color: #41525d; font-weight: 300; margin-bottom: 10px; }
+        .welcome-screen h2 { color: #41525d; font-weight: 300; margin-bottom: 10px; font-size: 32px; }
 
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 999; }
-        .modal-content { background: white; padding: 20px; border-radius: 12px; width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
-        .modal-content h3 { margin-bottom: 15px; color: #41525d; font-size: 18px; }
-        .modal-content input, .modal-content textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 15px; font-size: 15px; outline: none; }
-        .modal-content textarea { height: 100px; resize: none; font-family: inherit; }
-        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
-        .modal-btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        .modal-content { background: white; padding: 24px; border-radius: 8px; width: 380px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); border-top: 5px solid #00a884; }
+        .modal-content.broadcast-modal { border-top: 5px solid #0284c7; }
+        .modal-content h3 { margin-bottom: 15px; color: #111b21; font-size: 19px; }
+        .modal-content input, .modal-content textarea { width: 100%; padding: 10px; border: 1px solid #e9edef; border-radius: 6px; margin-bottom: 15px; font-size: 15px; outline: none; background: #f0f2f5; }
+        .modal-content textarea { height: 110px; resize: none; background: #fff; border: 1px solid #ccc; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+        .modal-btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; }
         .modal-btn.confirm { background: #00a884; color: white; }
         .modal-btn.broadcast-confirm { background: #0284c7; color: white; }
-        .modal-btn.cancel { background: #f0f2f5; color: #54656f; }
+        .modal-btn.cancel { background: white; color: #54656f; border: 1px solid #e9edef; }
     </style>
 </head>
 <body>
@@ -141,7 +147,7 @@ HTML_TEMPLATE = """
     <div class="modal" id="newChatModal">
         <div class="modal-content">
             <h3>بدء محادثة جديدة</h3>
-            <input type="text" id="newPhoneInput" placeholder="مثال: 967770000000" autocomplete="off" style="direction: ltr; text-align: left;">
+            <input type="text" id="newPhoneInput" placeholder="اكتب الرقم بمفتاحه الدولي (مثال: 96777000000)" autocomplete="off" style="direction: ltr; text-align: left;">
             <div class="modal-actions">
                 <button class="modal-btn cancel" onclick="closeNewChatModal()">إلغاء</button>
                 <button class="modal-btn confirm" onclick="createNewChat()">إضافة وفتح</button>
@@ -150,26 +156,29 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="modal" id="broadcastModal">
-        <div class="modal-content">
-            <h3>إرسال رسالة للجميع 📢</h3>
-            <p style="font-size: 13px; color: #667781; margin-bottom: 10px;">سيتم إرسال هذه الرسالة إلى كافة جهات الاتصال الموجودة في القائمة الجانبية حالياً.</p>
-            <textarea id="broadcastMessageInput" placeholder="اكتب الرسالة الجماعية هنا..."></textarea>
+        <div class="modal-content broadcast-modal">
+            <h3>إرسال رسالة جماعية (برودكاست) 📢</h3>
+            <p style="font-size: 13px; color: #667781; margin-bottom: 12px;">سيتم بث هذه الرسالة دفعة واحدة لجميع جهات الاتصال المسجلة في لوحتك.</p>
+            <textarea id="broadcastMessageInput" placeholder="اكتب نص الرسالة الجماعية هنا..."></textarea>
             <div class="modal-actions">
                 <button class="modal-btn cancel" onclick="closeBroadcastModal()">إلغاء</button>
-                <button class="modal-btn broadcast-confirm" onclick="sendBroadcast()">إرسال الآن</button>
+                <button class="modal-btn broadcast-confirm" onclick="sendBroadcast()">إرسال الآن للجميع</button>
             </div>
         </div>
     </div>
 
     <div class="sidebar">
         <div class="sidebar-header">
-            <div class="avatar"><i class="fas fa-user"></i></div>
-            <span style="font-weight: bold; color: #41525d;">محادثات الواتساب</span>
+            <div class="header-right-side">
+                <div class="avatar"><i class="fas fa-user"></i></div>
+                <span style="font-weight: bold; color: #111b21; margin-right: 5px;">محادثات الواتساب</span>
+            </div>
             <div class="header-actions">
-                <button class="btn-action" title="إرسال رسالة للجميع" onclick="openBroadcastModal()"><i class="fas fa-bullhorn" style="color: #0284c7;"></i></button>
-                <button class="btn-action" title="محادثة جديدة" onclick="openNewChatModal()"><i class="fas fa-comment-medical"></i></button>
+                <button class="btn-action broadcast-btn" title="إرسال رسالة جماعية للكل" onclick="openBroadcastModal()"><i class="fas fa-bullhorn"></i></button>
+                <button class="btn-action" title="بدء محادثة / إضافة رقم" onclick="openNewChatModal()"><i class="fas fa-comment-medical"></i></button>
             </div>
         </div>
+        
         <div class="search-box">
             <div class="search-inner">
                 <i class="fas fa-search"></i>
@@ -177,8 +186,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
-        <div class="user-list">
-            </div>
+        <div class="user-list"></div>
     </div>
 
     <div class="chat-area" id="chatArea" style="display: none;">
@@ -204,52 +212,49 @@ HTML_TEMPLATE = """
     <div class="welcome-screen" id="welcomeScreen">
         <i class="fab fa-whatsapp"></i>
         <h2>واتساب ويب للمسؤول</h2>
-        <p>تم إضافة توقيت إرسال واستلام الرسائل بجانب علامات الصح التتبعية بنجاح.</p>
+        <p>اضغط على الأزرار في الأعلى لإضافة أرقام وبدء المراسلة أو عمل برودكاست جماعي.</p>
     </div>
 
     <script>
         let currentPhone = "";
         let chatIntervalId = null;
-        let usersIntervalId = null;
         let rawUsersList = [];
 
         document.addEventListener("DOMContentLoaded", () => {
             fetchUsersList();
-            usersIntervalId = setInterval(fetchUsersList, 4000);
+            setInterval(fetchUsersList, 4000);
         });
 
         function fetchUsersList() {
             fetch('/api/users')
                 .then(res => res.json())
                 .then(data => {
-                    // تصحيح الربط لقراءة البيانات بشكل مباشر وسليم لمنع الخطأ البرمجي
                     rawUsersList = data.users ? data.users : data;
                     renderUsers(rawUsersList);
                 }).catch(err => console.error("Error fetching users:", err));
         }
 
         function renderUsers(users) {
-            const userListContainer = document.querySelector('.user-list');
+            const container = document.querySelector('.user-list');
             let htmlContent = "";
             users.forEach(user => {
                 const isActive = user.phone === currentPhone ? 'active' : '';
                 htmlContent += `
-                    <div class="user-item ${isActive}" data-phone="${user.phone}" onclick="openChat('${user.phone}', this)">
-                        <div class="avatar"><i class="fas fa-user-circle"></i></div>
+                    <div class="user-item ${isActive}" onclick="openChat('${user.phone}', this)">
+                        <div class="avatar"><i class="fas fa-user-circle" style="font-size: 38px; color: #dfe5e7;"></i></div>
                         <div class="user-info">
                             <div class="user-name">${user.phone}</div>
-                            <div class="user-status">اضغط لعرض الرسائل...</div>
+                            <div class="user-status">اضغط لعرض الدردشة...</div>
                         </div>
                     </div>
                 `;
             });
-            userListContainer.innerHTML = htmlContent;
+            container.innerHTML = htmlContent;
         }
 
         function filterUsers() {
             const q = document.getElementById('searchInput').value.trim().toLowerCase();
-            const filtered = rawUsersList.filter(u => u.phone.toLowerCase().includes(q));
-            renderUsers(filtered);
+            renderUsers(rawUsersList.filter(u => u.phone.toLowerCase().includes(q)));
         }
 
         function openNewChatModal() { document.getElementById('newChatModal').style.display = 'flex'; document.getElementById('newPhoneInput').focus(); }
@@ -258,8 +263,7 @@ HTML_TEMPLATE = """
         function closeBroadcastModal() { document.getElementById('broadcastModal').style.display = 'none'; document.getElementById('broadcastMessageInput').value = ''; }
 
         function sendBroadcast() {
-            const textarea = document.getElementById('broadcastMessageInput');
-            const message = textarea.value.trim();
+            const message = document.getElementById('broadcastMessageInput').value.trim();
             if(!message) return alert("الرجاء كتابة نص الرسالة أولاً!");
             const formData = new FormData();
             formData.append('message', message);
@@ -267,7 +271,7 @@ HTML_TEMPLATE = """
             .then(res => res.json())
             .then(data => {
                 if(data.status === 'ok') {
-                    alert(`تم إرسال الرسالة الجماعية بنجاح إلى ${data.sent_count} رقم!`);
+                    alert(`تم إرسال الرسالة الجماعية بنجاح إلى ${data.sent_count} رقم! 🚀`);
                     closeBroadcastModal();
                     fetchUsersList();
                 }
@@ -275,8 +279,7 @@ HTML_TEMPLATE = """
         }
 
         function createNewChat() {
-            const phoneInput = document.getElementById('newPhoneInput');
-            const phone = phoneInput.value.trim();
+            const phone = document.getElementById('newPhoneInput').value.trim();
             if(!phone) return alert("الرجاء كتابة الرقم بشكل صحيح!");
             const formData = new FormData();
             formData.append('phone', phone);
@@ -311,23 +314,16 @@ HTML_TEMPLATE = """
                 .then(data => {
                     const container = document.getElementById('messagesContainer');
                     const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 50;
-                    
                     container.innerHTML = "";
                     data.messages.forEach(msg => {
                         const row = document.createElement('div');
                         row.className = `msg-row ${msg.sender === 'me' ? 'me' : 'them'}`;
-                        
                         let iconHtml = "";
                         if(msg.sender === 'me') {
-                            if(msg.status === 'sent') {
-                                iconHtml = `<i class="fas fa-check"></i>`;
-                            } else if(msg.status === 'delivered') {
-                                iconHtml = `<i class="fas fa-check-double"></i>`;
-                            } else if(msg.status === 'read') {
-                                iconHtml = `<i class="fas fa-check-double read"></i>`;
-                            }
+                            if(msg.status === 'sent') iconHtml = `<i class="fas fa-check"></i>`;
+                            else if(msg.status === 'delivered') iconHtml = `<i class="fas fa-check-double"></i>`;
+                            else if(msg.status === 'read') iconHtml = `<i class="fas fa-check-double read"></i>`;
                         }
-
                         row.innerHTML = `
                             <div class="bubble">
                                 <span>${msg.message}</span>
@@ -339,10 +335,7 @@ HTML_TEMPLATE = """
                         `;
                         container.appendChild(row);
                     });
-
-                    if (isScrolledToBottom) {
-                        container.scrollTop = container.scrollHeight;
-                    }
+                    if (isScrolledToBottom) container.scrollTop = container.scrollHeight;
                 });
         }
 
