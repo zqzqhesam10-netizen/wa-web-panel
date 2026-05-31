@@ -2,21 +2,18 @@ from flask import Flask, request, jsonify, render_template_string
 import sqlite3
 import requests
 import os
-from datetime import datetime
 import threading
 import time
-import hashlib
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
 # ================= CONFIG =================
-ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
-PHONE_NUMBER_ID = "1171944939327803"
+ACCESS_TOKEN = "YOUR_TOKEN"
+PHONE_NUMBER_ID = "YOUR_PHONE_ID"
 VERIFY_TOKEN = "mytoken123"
 
 TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
-STATE_FILE = "state.txt"
 
 # ================= DB =================
 def db():
@@ -38,12 +35,9 @@ def init_db():
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        msg_id TEXT UNIQUE,
         phone TEXT,
         message TEXT,
         sender TEXT DEFAULT 'them',
-        status TEXT DEFAULT 'sent',
-        msg_time TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -53,17 +47,6 @@ def init_db():
 
 init_db()
 
-# ================= STATE =================
-def get_state():
-    if not os.path.exists(STATE_FILE):
-        return ""
-    return open(STATE_FILE, "r", encoding="utf-8").read()
-
-
-def save_state(data):
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        f.write(data)
-
 # ================= SCRAPER =================
 def fetch_page():
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -71,14 +54,20 @@ def fetch_page():
     return r.text
 
 
-def get_fingerprint(html):
+def extract_last_item(html):
     soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text(separator=" ", strip=True)
-    return hashlib.md5(text.encode()).hexdigest()
+    items = soup.find_all("div")
 
-# ================= WHATSAPP SEND =================
+    for item in reversed(items):
+        text = item.get_text(strip=True)
+        if text and len(text) > 15:
+            return text
+
+    return None
+
+
+# ================= WHATSAPP =================
 def send_message(phone, message):
-    clean_phone = str(phone).replace("+", "").strip()
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
     headers = {
@@ -88,29 +77,24 @@ def send_message(phone, message):
 
     data = {
         "messaging_product": "whatsapp",
-        "to": clean_phone,
+        "to": phone,
         "type": "text",
         "text": {"body": message}
     }
 
     requests.post(url, headers=headers, json=data)
 
-# ================= إرسال آخر إضافة مرة واحدة =================
-def send_last_item_once():
+
+# ================= MONITOR =================
+def check_updates():
     try:
         html = fetch_page()
-        soup = BeautifulSoup(html, "html.parser")
-
-        items = soup.find_all("div")
-
-        if not items:
-            print("No items found")
-            return
-
-        last_item = items[-1].get_text(strip=True)
+        last_item = extract_last_item(html)
 
         if not last_item:
-            last_item = "تم العثور على إضافة جديدة ولكن بدون نص واضح"
+            return
+
+        print("🔥 Latest:", last_item)
 
         conn = db()
         c = conn.cursor()
@@ -118,58 +102,30 @@ def send_last_item_once():
         users = [u["phone"] for u in c.fetchall()]
         conn.close()
 
+        message = f"🔥 آخر إضافة:\n\n{last_item}"
+
         for phone in users:
-            send_message(phone, f"🆕 آخر إضافة حالياً:\n\n{last_item}")
-
-        print("✅ Last item sent successfully!")
-
-    except Exception as e:
-        print("❌ Error:", e)
-
-# ================= MONITOR =================
-def check_updates():
-    try:
-        html = fetch_page()
-        new_fp = get_fingerprint(html)
-        old_fp = get_state()
-
-        if new_fp != old_fp:
-            print("🔥 New update detected!")
-
-            save_state(new_fp)
-
-            soup = BeautifulSoup(html, "html.parser")
-            items = soup.find_all("div")
-
-            last_item = items[-1].get_text(strip=True) if items else "تحديث جديد"
-
-            conn = db()
-            c = conn.cursor()
-            c.execute("SELECT phone FROM users")
-            users = [u["phone"] for u in c.fetchall()]
-            conn.close()
-
-            for phone in users:
-                send_message(phone, f"🔥 تحديث جديد:\n\n{last_item}")
+            send_message(phone, message)
 
     except Exception as e:
         print("Monitor error:", e)
 
-# ================= LOOP =================
+
 def loop():
-    print("🔥 Monitor started...")
     while True:
         check_updates()
-        time.sleep(120)
+        time.sleep(180)
 
-# ================= START =================
+
 def start_monitor():
     threading.Thread(target=loop, daemon=True).start()
 
-# ================= WEB =================
+
+# ================= ROUTES =================
 @app.route("/")
 def home():
-    return "Bot is running"
+    return "WhatsApp Panel Running"
+
 
 @app.route("/api/users")
 def users():
@@ -178,7 +134,8 @@ def users():
     c.execute("SELECT * FROM users")
     data = c.fetchall()
     conn.close()
-    return jsonify([dict(i) for i in data])
+    return jsonify([dict(u) for u in data])
+
 
 @app.route("/api/add_user", methods=["POST"])
 def add_user():
@@ -190,15 +147,43 @@ def add_user():
     conn.close()
     return jsonify({"status": "ok"})
 
-# ================= MAIN =================
+
+@app.route("/send", methods=["POST"])
+def send():
+    phone = request.form["phone"]
+    message = request.form["message"]
+
+    send_message(phone, message)
+
+    conn = db()
+    c = conn.cursor()
+    c.execute("INSERT INTO messages (phone, message, sender) VALUES (?, ?, 'me')",
+              (phone, message))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"status": "ok"})
+
+
+@app.route("/messages/<phone>")
+def messages(phone):
+    conn = db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM messages WHERE phone=? ORDER BY id ASC", (phone,))
+    data = c.fetchall()
+    conn.close()
+    return jsonify({"messages": [dict(m) for m in data]})
+
+
+@app.route("/webhook", methods=["GET"])
+def webhook_verify():
+    if request.args.get("hub.verify_token") == VERIFY_TOKEN:
+        return request.args.get("hub.challenge")
+    return "error", 403
+
+
+# ================= START =================
 if __name__ == "__main__":
-    init_db()
-
-    # 🔥 إرسال آخر إضافة مرة واحدة للتجربة
-    send_last_item_once()
-
-    # 🔥 تشغيل المراقبة
     start_monitor()
-
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
