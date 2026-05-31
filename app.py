@@ -139,19 +139,6 @@ HTML_TEMPLATE = """
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>WhatsApp Panel</title>
-</head>
-<body>
-
-<h2>لوحة التحكم</h2>
-
-<!-- هنا واجهتك الكاملة (تقدر تحط HTML الكبير حقك هنا) -->
-
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>واتساب ويب - لوحة التحكم</title>
     <style>
