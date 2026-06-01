@@ -213,7 +213,33 @@
     });
 }
         
-        function sendMessage(e) { e.preventDefault(); /* كود الإرسال */ }
+       function sendMessage(e) {
+            e.preventDefault();
+            const messageInput = document.getElementById('messageInput');
+            const msg = messageInput.value;
+            const phone = document.getElementById('activePhone').value;
+
+            if (!msg.trim()) return; 
+
+            const formData = new FormData();
+            formData.append('phone', phone);
+            formData.append('message', msg);
+
+            fetch('/send', { 
+                method: 'POST', 
+                body: formData 
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === "ok") {
+                    messageInput.value = ''; 
+                    fetchMessages(); 
+                } else {
+                    alert("حدث خطأ في الإرسال");
+                }
+            })
+            .catch(err => console.error("Error sending message:", err));
+        }
         function openNewChatModal() { document.getElementById('newChatModal').style.display = 'flex'; }
         function closeNewChatModal() { document.getElementById('newChatModal').style.display = 'none'; }
         function openBroadcastModal() { document.getElementById('broadcastModal').style.display = 'flex'; }
