@@ -10,9 +10,9 @@ from psycopg2.extras import RealDictCursor
 app = Flask(__name__)
 
 # ================= CONFIG =================
-ACCESS_TOKEN = os.environ.get"EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
-PHONE_NUMBER_ID = os.environ.get"1171944939327803"
-VERIFY_TOKEN = os.environ.get"mytoken123", "mytoken123"
+ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
+PHONE_NUMBER_ID = "1171944939327803"
+VERIFY_TOKEN = "mytoken123"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
