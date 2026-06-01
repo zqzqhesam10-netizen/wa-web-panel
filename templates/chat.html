@@ -234,7 +234,7 @@
 
         function fetchMessages() {
             if (!currentPhone) return;
-            fetch(`/messages/${currentPhone}`)
+            fetch(`/api/messages/${currentPhone}`)
                 .then(res => res.json())
                 .then(data => {
                     const container = document.getElementById('messagesContainer');
