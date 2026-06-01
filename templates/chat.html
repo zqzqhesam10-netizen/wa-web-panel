@@ -9,12 +9,9 @@
         body { display: flex; height: 100vh; background-color: #dadbd3; overflow: hidden; }
         
         .sidebar { width: 380px; min-width: 380px; background: #fff; display: flex; flex-direction: column; border-left: 1px solid #e9edef; }
-        
         .sidebar-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; justify-content: space-between; direction: rtl; }
         .header-right-side { display: flex; align-items: center; gap: 10px; }
         .avatar { width: 40px; height: 40px; background: #dfe5e7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #54656f; font-weight: bold; font-size: 14px; }
-        
-        /* أزرار نصية واضحة ومباشرة تجبر المتصفح على إظهارها رغماً عنه */
         .header-actions { display: flex; align-items: center; gap: 8px; margin-right: auto; }
         .text-btn { border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; color: white; display: inline-flex; align-items: center; justify-content: center; transition: opacity 0.2s; }
         .text-btn:hover { opacity: 0.9; }
@@ -35,12 +32,10 @@
 
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2 url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-repeat: repeat; }
         .chat-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #e9edef; }
-        
         .messages-container { flex: 1; overflow-y: auto; padding: 20px 5%; display: flex; flex-direction: column; gap: 8px; }
         .msg-row { display: flex; width: 100%; }
         .msg-row.me { justify-content: flex-start; } 
         .msg-row.them { justify-content: flex-end; }
-        
         .bubble { max-width: 65%; padding: 6px 12px; border-radius: 8px; font-size: 14.5px; line-height: 1.4; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); word-wrap: break-word; display: flex; flex-direction: column; }
         .msg-row.me .bubble { background: #d9fdd3; color: #111b21; }
         .msg-row.them .bubble { background: #ffffff; color: #111b21; }
@@ -67,9 +62,17 @@
         .modal-btn.confirm { background: #00a884; color: white; }
         .modal-btn.broadcast-confirm { background: #0284c7; color: white; }
         .modal-btn.cancel { background: white; color: #54656f; border: 1px solid #e9edef; }
+        
+        /* القائمة المخصصة */
+        #context-menu { display: none; position: absolute; z-index: 1000; background: white; border: 1px solid #ccc; padding: 5px; cursor: pointer; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); border-radius: 5px; }
+        #context-menu div { padding: 8px 12px; }
+        #context-menu div:hover { background-color: #f5f6f6; }
     </style>
 </head>
 <body>
+    <div id="context-menu">
+        <div onclick="deleteChat()">🗑️ حذف المحادثة</div>
+    </div>
 
     <div class="modal" id="newChatModal">
         <div class="modal-content">
@@ -105,13 +108,11 @@
                 <button class="text-btn new-chat" onclick="openNewChatModal()">➕ رقم جديد</button>
             </div>
         </div>
-        
         <div class="search-box">
             <div class="search-inner">
                 <input type="text" id="searchInput" placeholder="البحث عن دردشة..." oninput="filterUsers()">
             </div>
         </div>
-        
         <div class="user-list"></div>
     </div>
 
@@ -123,9 +124,7 @@
                 <div style="font-size: 12px; color: #667781;">متصل الآن</div>
             </div>
         </div>
-        
         <div class="messages-container" id="messagesContainer"></div>
-
         <div class="input-area">
             <form id="sendForm" onsubmit="sendMessage(event)">
                 <input type="hidden" id="activePhone">
@@ -142,6 +141,7 @@
 
     <script>
         let currentPhone = "";
+        let selectedPhone = "";
         let chatIntervalId = null;
         let rawUsersList = [];
 
@@ -150,13 +150,41 @@
             setInterval(fetchUsersList, 4000);
         });
 
+        // منطق القائمة المخصصة
+        document.addEventListener('contextmenu', function(e) {
+            const item = e.target.closest('.user-item');
+            if (item) {
+                e.preventDefault();
+                selectedPhone = item.querySelector('.user-name').innerText;
+                const menu = document.getElementById('context-menu');
+                menu.style.top = e.pageY + 'px';
+                menu.style.left = e.pageX + 'px';
+                menu.style.display = 'block';
+            }
+        });
+
+        document.addEventListener('click', () => { 
+            document.getElementById('context-menu').style.display = 'none'; 
+        });
+
+        function deleteChat() {
+            if(confirm("هل أنت متأكد من حذف محادثة " + selectedPhone + "؟")) {
+                fetch('/api/delete_messages/' + selectedPhone, { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    alert("تم حذف المحادثة");
+                    location.reload();
+                });
+            }
+        }
+
         function fetchUsersList() {
             fetch('/api/users')
                 .then(res => res.json())
                 .then(data => {
                     rawUsersList = data.users ? data.users : data;
                     renderUsers(rawUsersList);
-                }).catch(err => console.error("Error fetching users:", err));
+                }).catch(err => console.error("Error:", err));
         }
 
         function renderUsers(users) {
@@ -183,39 +211,32 @@
         }
 
         function openNewChatModal() { document.getElementById('newChatModal').style.display = 'flex'; document.getElementById('newPhoneInput').focus(); }
-        function closeNewChatModal() { document.getElementById('newChatModal').style.display = 'none'; document.getElementById('newPhoneInput').value = ''; }
-        function openBroadcastModal() { document.getElementById('broadcastModal').style.display = 'flex'; document.getElementById('broadcastMessageInput').focus(); }
-        function closeBroadcastModal() { document.getElementById('broadcastModal').style.display = 'none'; document.getElementById('broadcastMessageInput').value = ''; }
+        function closeNewChatModal() { document.getElementById('newChatModal').style.display = 'none'; }
+        function openBroadcastModal() { document.getElementById('broadcastModal').style.display = 'flex'; }
+        function closeBroadcastModal() { document.getElementById('broadcastModal').style.display = 'none'; }
 
         function sendBroadcast() {
             const message = document.getElementById('broadcastMessageInput').value.trim();
-            if(!message) return alert("الرجاء كتابة نص الرسالة أولاً!");
+            if(!message) return alert("الرجاء كتابة النص!");
             const formData = new FormData();
             formData.append('message', message);
             fetch('/api/broadcast', { method: 'POST', body: formData })
             .then(res => res.json())
             .then(data => {
-                if(data.status === 'ok') {
-                    alert(`تم إرسال الرسالة الجماعية بنجاح إلى ${data.sent_count} رقم! 🚀`);
-                    closeBroadcastModal();
-                    fetchUsersList();
-                }
+                alert(`تم الإرسال لـ ${data.sent_count} رقم`);
+                closeBroadcastModal();
             });
         }
 
         function createNewChat() {
             const phone = document.getElementById('newPhoneInput').value.trim();
-            if(!phone) return alert("الرجاء كتابة الرقم بشكل صحيح!");
             const formData = new FormData();
             formData.append('phone', phone);
             fetch('/api/add_user', { method: 'POST', body: formData })
             .then(res => res.json())
             .then(data => {
-                if(data.status === 'ok') {
-                    closeNewChatModal();
-                    fetchUsersList();
-                    openChat(phone, null);
-                }
+                closeNewChatModal();
+                fetchUsersList();
             });
         }
 
@@ -238,34 +259,22 @@
                 .then(res => res.json())
                 .then(data => {
                     const container = document.getElementById('messagesContainer');
-                    const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 50;
                     container.innerHTML = "";
                     data.messages.forEach(msg => {
                         const row = document.createElement('div');
                         row.className = `msg-row ${msg.sender === 'me' ? 'me' : 'them'}`;
-                        row.innerHTML = `
-                            <div class="bubble">
-                                <span>${msg.message}</span>
-                                <div class="meta-container">
-                                    <span class="time-text">${msg.msg_time || ''}</span>
-                                </div>
-                            </div>
-                        `;
+                        row.innerHTML = `<div class="bubble"><span>${msg.message}</span><div class="meta-container">${msg.msg_time || ''}</div></div>`;
                         container.appendChild(row);
                     });
-                    if (isScrolledToBottom) container.scrollTop = container.scrollHeight;
                 });
         }
 
         function sendMessage(event) {
             event.preventDefault();
             const input = document.getElementById('messageInput');
-            const message = input.value;
-            const phone = document.getElementById('activePhone').value;
-            if(!message.trim()) return;
             const formData = new FormData();
-            formData.append('phone', phone);
-            formData.append('message', message);
+            formData.append('phone', currentPhone);
+            formData.append('message', input.value);
             fetch('/send', { method: 'POST', body: formData })
             .then(res => res.json())
             .then(data => { input.value = ""; fetchMessages(); });
