@@ -270,6 +270,20 @@
             .then(res => res.json())
             .then(data => { input.value = ""; fetchMessages(); });
         }
-    </script>
+    </scrfunction refreshMonitor() {
+    fetch('/api/monitor-status')
+        .then(res => res.json())
+        .then(data => {
+            const list = document.getElementById('sites-status-list');
+            list.innerHTML = data.map(site => `
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding: 5px;">
+                    <span>${site.name}</span>
+                    <span style="color: ${site.status === 'OK' ? 'green' : 'red'}">${site.status}</span>
+                </div>
+            `).join('');
+        });
+}
+// تحديث تلقائي كل 60 ثانية
+setInterval(refreshMonitor, 60000);ipt>
 </body>
 </html>
