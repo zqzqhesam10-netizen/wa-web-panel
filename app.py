@@ -1,12 +1,8 @@
 from flask import Flask, request, jsonify, render_template
-import os
-import threading
-import time
-from datetime import datetime
-import requests
-import psycopg2
+import os, threading, time, requests, psycopg2
 from psycopg2.extras import RealDictCursor
-from bs4 import BeautifulSoup # أضفنا هذه المكتبة
+from bs4 import BeautifulSoup
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -16,7 +12,6 @@ PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# إعدادات المراقبة
 TARGET_SITES = [
     {"url": "https://web6112x.faselhdx.bid/recent_series", "selector": ".post-title a"},
     {"url": "https://w1.anime4up.rest/episode/", "selector": ".eposhi a"},
@@ -27,49 +22,37 @@ TARGET_SITES = [
     {"url": "https://m.asd.ink/category/indian-movies-2/", "selector": ".post-title a"},
     {"url": "https://5tv.lol/new-episodes/", "selector": ".entry-title a"}
 ]
-last_items = {site["url"]: "" for site in TARGET_SITES}
 
-# ================= DB & WHATSAPP FUNCTIONS (كودك الأصلي) =================
+# DB FUNCTIONS
 def db(): return psycopg2.connect(DATABASE_URL)
 
 def send_message(phone, message):
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-    data = {"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}}
-    requests.post(url, headers=headers, json=data)
+    requests.post(url, headers=headers, json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
 
-# ================= دالة البث التلقائي الجديدة =================
-def broadcast_to_all(message):
-    conn = db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT phone FROM users")
-    users = cur.fetchall()
-    for u in users:
-        send_message(u["phone"], message)
-    conn.close()
-
-# ================= نظام المراقبة =================
+# MONITORING
 def check_updates():
     headers = {'User-Agent': 'Mozilla/5.0'}
     for site in TARGET_SITES:
         try:
-            res = requests.get(site["url"], headers=headers, timeout=15)
+            res = requests.get(site["url"], headers=headers, timeout=10)
             soup = BeautifulSoup(res.text, 'html.parser')
             item = soup.select_one(site["selector"])
             if item:
-                title = item.text.strip()
-                link = item['href']
-                if last_items.get(site["url"]) != title:
-                    last_items[site["url"]] = title
-                    broadcast_to_all(f"🆕 جديد من {site['url'].split('/')[2]}:\n{title}\n🔗 {link}")
+                # يمكنك إضافة شرط هنا للتحقق من التكرار إذا أردت
+                print(f"Checking {site['url']}...")
         except: continue
 
 def loop():
     while True:
         check_updates()
-        time.sleep(600) # فحص كل 10 دقائق
+        time.sleep(600)
 
-# ================= ROUTES (كودك الأصلي) =================
+# ROUTES
+@app.route("/")
+def home(): return render_template("chat.html")
+
 @app.route("/api/users")
 def users():
     conn = db()
@@ -79,11 +62,58 @@ def users():
     cur.close(); conn.close()
     return jsonify(rows)
 
-# [أضف هنا بقية دوالك الأصلية: add_user, messages, send, broadcast, webhook]
-@app.route("/")
-def home(): return render_template("chat.html")
+@app.route("/api/add_user", methods=["POST"])
+def add_user():
+    phone = request.form.get("phone")
+    conn = db(); cur = conn.cursor()
+    cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"status": "ok"})
 
-# ================= START =================
+@app.route("/api/messages/<phone>")
+def messages(phone):
+    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM messages WHERE phone=%s ORDER BY id ASC", (phone,))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return jsonify({"messages": rows})
+
+@app.route("/send", methods=["POST"])
+def send():
+    phone = request.form.get("phone"); message = request.form.get("message")
+    send_message(phone, message)
+    conn = db(); cur = conn.cursor()
+    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES(%s,%s,'me',%s)", (phone, message, datetime.now().strftime("%H:%M")))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"status": "ok"})
+
+@app.route("/api/broadcast", methods=["POST"])
+def broadcast():
+    message = request.form.get("message")
+    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT phone FROM users"); users = cur.fetchall()
+    for u in users: send_message(u["phone"], message)
+    cur.close(); conn.close()
+    return jsonify({"status": "ok", "sent_count": len(users)})
+
+@app.route("/api/monitor-status")
+def monitor_status():
+    status_list = []
+    for site in TARGET_SITES:
+        try:
+            res = requests.get(site["url"], timeout=5)
+            status_list.append({"name": site['url'].split('/')[2], "status": "OK" if res.status_code == 200 else "Error"})
+        except: status_list.append({"name": site['url'].split('/')[2], "status": "Offline"})
+    return jsonify(status_list)
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        if request.args.get("hub.verify_token") == VERIFY_TOKEN: return request.args.get("hub.challenge")
+        return "error", 403
+    return "ok"
+
+# START
 if __name__ != "__main__":
     threading.Thread(target=loop, daemon=True).start()
 
