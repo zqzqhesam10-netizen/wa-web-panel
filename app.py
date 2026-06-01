@@ -9,13 +9,13 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ================= CONFIG =================
-ACCESS_TOKEN = os.getenv("EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD")
-PHONE_NUMBER_ID = os.getenv("1171944939327803")
-VERIFY_TOKEN = os.getenv("mytoken123")
+ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
+PHONE_NUMBER_ID = "1171944939327803"
+VERIFY_TOKEN = "mytoken123"
 
 TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
 
-# ================= STORAGE PATH (FIXED FOR RENDER) =================
+# ================= STORAGE (FIXED) =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
@@ -23,7 +23,6 @@ DB_PATH = os.path.join(DATA_DIR, "chat.db")
 STATE_FILE = os.path.join(DATA_DIR, "state.txt")
 
 
-# ================= INIT =================
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -47,7 +46,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         phone TEXT,
         message TEXT,
-        sender TEXT DEFAULT 'them',
+        sender TEXT,
         msg_time TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -59,13 +58,8 @@ def init_db():
 
 init_db()
 
-
+# ================= WHATSAPP =================
 def send_message(phone, message):
-    print("🚀 SENDING MESSAGE...")
-    print("TO:", phone)
-    print("TOKEN:", ACCESS_TOKEN)
-    print("PHONE_ID:", PHONE_NUMBER_ID)
-
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
     headers = {
@@ -86,7 +80,7 @@ def send_message(phone, message):
     print("RESPONSE:", r.text)
 
 
-# ================= MONITOR SYSTEM =================
+# ================= MONITOR =================
 def fetch_page():
     return requests.get(TARGET_URL, timeout=20).text
 
@@ -98,8 +92,7 @@ def fingerprint(html):
 def get_state():
     if not os.path.exists(STATE_FILE):
         return ""
-    with open(STATE_FILE, "r") as f:
-        return f.read()
+    return open(STATE_FILE).read()
 
 
 def save_state(s):
@@ -124,7 +117,7 @@ def check_updates():
             conn.close()
 
             for u in users:
-                send_message(u["phone"], "🔥 تم اكتشاف تحديث جديد في الموقع")
+                send_message(u["phone"], "🔥 تم اكتشاف تحديث جديد")
 
     except Exception as e:
         print("monitor error:", e)
@@ -142,6 +135,10 @@ def start_monitor():
 
 # ================= ROUTES =================
 @app.route("/")
+def home():
+    return render_template("chat.html")
+
+
 @app.route("/chat")
 def chat():
     return render_template("chat.html")
@@ -157,52 +154,41 @@ def users():
     return jsonify([dict(x) for x in data])
 
 
-@app.route("/api/add_user", methods=["POST"])
-def add_user():
-    phone = request.form.get("phone")
-
-    conn = db()
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-    conn.commit()
-    conn.close()
-
-    return jsonify({"status": "ok"})
-
-
-@app.route("/send", methods=["POST"])
-def send():
-    phone = request.form["phone"]
-    message = request.form["message"]
-
-    send_message(phone, message)
-
-    conn = db()
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO messages (phone, message, sender, msg_time)
-        VALUES (?, ?, 'me', ?)
-    """, (phone, message, datetime.now().strftime("%H:%M")))
-    conn.commit()
-    conn.close()
-
-    conn = db()
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-    conn.commit()
-    conn.close()
-
-    return jsonify({"status": "ok"})
-
-
-@app.route("/messages/<phone>")
+@app.route("/api/messages/<phone>")
 def messages(phone):
     conn = db()
     c = conn.cursor()
     c.execute("SELECT * FROM messages WHERE phone=? ORDER BY id ASC", (phone,))
     data = c.fetchall()
     conn.close()
-    return jsonify({"messages": [dict(x) for x in data]})
+    return jsonify([dict(x) for x in data])
+
+
+@app.route("/send", methods=["POST"])
+def send():
+    phone = request.form.get("phone")
+    message = request.form.get("message")
+
+    send_message(phone, message)
+
+    conn = db()
+    c = conn.cursor()
+
+    c.execute("""
+        INSERT INTO messages (phone, message, sender, msg_time)
+        VALUES (?, ?, 'me', ?)
+    """, (phone, message, datetime.now().strftime("%H:%M")))
+
+    conn.commit()
+    conn.close()
+
+    conn = db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"status": "ok"})
 
 
 @app.route("/webhook", methods=["GET", "POST"])
@@ -215,15 +201,18 @@ def webhook():
     try:
         data = request.json
         msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
+
         phone = msg["from"]
         text = msg["text"]["body"]
 
         conn = db()
         c = conn.cursor()
+
         c.execute("""
             INSERT INTO messages (phone, message, sender, msg_time)
             VALUES (?, ?, 'them', ?)
         """, (phone, text, datetime.now().strftime("%H:%M")))
+
         conn.commit()
         conn.close()
 
