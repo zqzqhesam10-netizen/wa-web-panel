@@ -3,40 +3,10 @@ import os, threading, time, requests, psycopg2
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
 from datetime import datetime
-import cloudscraper # تأكد من إضافتها لـ requirements.txt
+import cloudscraper
 
 app = Flask(__name__)
-
-# إنشاء كائن الـ scraper مرة واحدة
 scraper = cloudscraper.create_scraper()
-
-# دالة فحص الحالة المحدثة
-@app.route("/api/monitor-status")
-def monitor_status():
-    status_list = []
-    for site in TARGET_SITES:
-        try:
-            # استخدام scraper بدل requests
-            res = scraper.get(site["url"], timeout=10)
-            status = "OK" if res.status_code == 200 else f"Error ({res.status_code})"
-        except Exception as e:
-            status = "Offline"
-        status_list.append({"name": site['url'].split('/')[2], "status": status})
-    return jsonify(status_list)
-
-# دالة المراقبة التلقائية المحدثة
-def check_updates():
-    for site in TARGET_SITES:
-        try:
-            # استخدام scraper بدل requests
-            res = scraper.get(site["url"], timeout=15)
-            if res.status_code == 200:
-                soup = BeautifulSoup(res.text, 'html.parser')
-                item = soup.select_one(site["selector"])
-                if item:
-                    # منطق الإرسال هنا
-                    print(f"Scraped: {item.text.strip()}")
-        except: continue
 
 # CONFIG
 ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
@@ -63,17 +33,16 @@ def send_message(phone, message):
     headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
     requests.post(url, headers=headers, json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
 
-# MONITORING
+# MONITORING (تستخدم scraper لتجاوز 403)
 def check_updates():
-    headers = {'User-Agent': 'Mozilla/5.0'}
     for site in TARGET_SITES:
         try:
-            res = requests.get(site["url"], headers=headers, timeout=10)
-            soup = BeautifulSoup(res.text, 'html.parser')
-            item = soup.select_one(site["selector"])
-            if item:
-                # يمكنك إضافة شرط هنا للتحقق من التكرار إذا أردت
-                print(f"Checking {site['url']}...")
+            res = scraper.get(site["url"], timeout=15)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'html.parser')
+                item = soup.select_one(site["selector"])
+                if item:
+                    print(f"Checking {site['url']}: {item.text.strip()}")
         except: continue
 
 def loop():
@@ -87,8 +56,7 @@ def home(): return render_template("chat.html")
 
 @app.route("/api/users")
 def users():
-    conn = db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("SELECT * FROM users ORDER BY phone")
     rows = cur.fetchall()
     cur.close(); conn.close()
@@ -127,19 +95,15 @@ def broadcast():
     for u in users: send_message(u["phone"], message)
     cur.close(); conn.close()
     return jsonify({"status": "ok", "sent_count": len(users)})
-    
+
 @app.route("/api/monitor-status")
 def monitor_status():
     status_list = []
-    # إضافة User-Agent لتبدو كأنها زيارة من متصفح حقيقي
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-    
     for site in TARGET_SITES:
         try:
-            res = requests.get(site["url"], headers=headers, timeout=10)
+            res = scraper.get(site["url"], timeout=10)
             status = "OK" if res.status_code == 200 else f"Error ({res.status_code})"
-        except Exception as e:
-            status = "Offline"
+        except: status = "Offline"
         status_list.append({"name": site['url'].split('/')[2], "status": status})
     return jsonify(status_list)
 
@@ -150,7 +114,6 @@ def webhook():
         return "error", 403
     return "ok"
 
-# START
 if __name__ != "__main__":
     threading.Thread(target=loop, daemon=True).start()
 
