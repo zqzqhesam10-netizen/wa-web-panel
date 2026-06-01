@@ -198,16 +198,20 @@
             document.getElementById('chatArea').style.display = 'flex';
             fetchMessages();
         }
-
         function fetchMessages() {
-            fetch(`/api/messages/${currentPhone}`).then(res => res.json()).then(data => {
-                const container = document.getElementById('messagesContainer');
-                container.innerHTML = data.messages.map(msg => `
-                    <div class="msg-row ${msg.sender === 'me' ? 'me' : 'them'}">
-                        <div class="bubble">${msg.message}</div>
-                    </div>`).join('');
-            });
-        }
+    // التأكد من أن currentPhone ليس فارغاً
+    if (!currentPhone) return; 
+
+    fetch(`/api/messages/${currentPhone}`)
+    .then(res => res.json())
+    .then(data => {
+        const container = document.getElementById('messagesContainer');
+        container.innerHTML = data.messages.map(msg => `
+            <div class="msg-row ${msg.sender === 'me' ? 'me' : 'them'}">
+                <div class="bubble">${msg.message}</div>
+            </div>`).join('');
+    });
+}
         
         function sendMessage(e) { e.preventDefault(); /* كود الإرسال */ }
         function openNewChatModal() { document.getElementById('newChatModal').style.display = 'flex'; }
