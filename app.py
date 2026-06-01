@@ -99,6 +99,13 @@ def send():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"status": "ok"})
 
+@app.route("/api/delete_messages/<phone>", methods=['POST'])
+def delete_messages(phone):
+    conn = db(); cur = conn.cursor()
+    cur.execute("DELETE FROM messages WHERE phone=%s", (phone,))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"status": "deleted"})
+
 @app.route("/api/broadcast", methods=["POST"])
 def broadcast():
     message = request.form.get("message")
