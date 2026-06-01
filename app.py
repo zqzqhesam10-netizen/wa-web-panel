@@ -60,11 +60,11 @@ def init_db():
 init_db()
 
 
-# ================= WHATSAPP API =================
-def send_message(phone, message):
-    if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
-        print("Missing WhatsApp credentials")
-        return
+# ================= WHATSAPP API =================def send_message(phone, message):
+    print("🚀 SENDING MESSAGE...")
+    print("TO:", phone)
+    print("TOKEN:", ACCESS_TOKEN)
+    print("PHONE_ID:", PHONE_NUMBER_ID)
 
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
@@ -80,10 +80,10 @@ def send_message(phone, message):
         "text": {"body": message}
     }
 
-    try:
-        requests.post(url, headers=headers, json=data, timeout=10)
-    except Exception as e:
-        print("send error:", e)
+    r = requests.post(url, headers=headers, json=data)
+
+    print("STATUS:", r.status_code)
+    print("RESPONSE:", r.text)
 
 
 # ================= MONITOR SYSTEM =================
