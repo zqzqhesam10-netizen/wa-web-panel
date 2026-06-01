@@ -12,14 +12,6 @@ ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZA
 PHONE_NUMBER_ID = "1171944939327803"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-TARGET_SITES = [
-    {"url": "https://web6112x.faselhdx.bid/recent_series", "selector": ".post-title a"},
-    {"url": "https://w1.anime4up.rest/episode/", "selector": ".eposhi a"},
-    {"url": "https://m.asd.ink/category/foreign-movies-14/", "selector": ".post-title a"},
-    {"url": "https://5tv.lol/new-episodes/", "selector": ".entry-title a"}
-]
-
-# DATABASE & TOOLS
 def db(): return psycopg2.connect(DATABASE_URL)
 
 def send_message(phone, message):
@@ -27,12 +19,12 @@ def send_message(phone, message):
     headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
     requests.post(url, headers=headers, json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
 
+# نظام الفحص الدوري
 def check_and_send():
-    print("--- بدأ الفحص الدوري ---")
-    try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        for site in TARGET_SITES:
-            res = requests.get('http://api.scraperapi.com/', params={'api_key': SCRAPER_API_KEY, 'url': site["url"], 'render': 'false'}, timeout=30)
+    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+    for site in [{"url": "https://5tv.lol/new-episodes/", "selector": ".entry-title a"}]:
+        try:
+            res = requests.get(site["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, 'html.parser')
                 item = soup.select_one(site["selector"])
@@ -41,21 +33,19 @@ def check_and_send():
                     link = item.get('href', '')
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        print(f"✅ جديد: {title}")
                         cur.execute("SELECT phone FROM users")
                         for u in cur.fetchall():
-                            try: send_message(u["phone"], f"🚨 حلقة جديدة:\n{title}\n{link}")
+                            try: send_message(u["phone"], f"🚨 جديد:\n{title}\n{link}")
                             except: pass
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system',%s,'system',%s)", (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
-        cur.close(); conn.close()
-    except Exception as e: print(f"Error: {e}")
+        except: pass
+    cur.close(); conn.close()
 
-# BACKGROUND TASK
 def loop():
     while True:
         check_and_send()
-        time.sleep(300) # فحص كل 5 دقائق
+        time.sleep(600)
 
 if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     threading.Thread(target=loop, daemon=True).start()
@@ -67,9 +57,15 @@ def home(): return render_template("chat.html")
 @app.route("/api/users")
 def users():
     conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM users"); rows = cur.fetchall()
+    cur.execute("SELECT phone FROM users"); rows = cur.fetchall()
     cur.close(); conn.close()
     return jsonify(rows)
+
+@app.route("/api/send-message", methods=["POST"])
+def send_message_route():
+    data = request.json
+    send_message(data.get("phone"), data.get("message"))
+    return jsonify({"status": "success"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
