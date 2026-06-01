@@ -107,7 +107,7 @@ def check_updates():
         old_fp = get_state()
 
         if new_fp != old_fp:
-            print("🔥 Update detected")
+            print(" Update detected")
             save_state(new_fp)
 
             conn = db()
@@ -117,7 +117,7 @@ def check_updates():
             conn.close()
 
             for u in users:
-                send_message(u["phone"], "🔥 تم اكتشاف تحديث جديد")
+                send_message(u["phone"], " تم اكتشاف تحديث جديد")
 
     except Exception as e:
         print("monitor error:", e)
