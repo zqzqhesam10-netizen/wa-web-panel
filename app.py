@@ -3,6 +3,38 @@ import os, threading, time, requests, psycopg2
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
 from datetime import datetime
+import cloudscraper # تأكد من إضافتها لـ requirements.txt
+
+# إنشاء كائن الـ scraper مرة واحدة
+scraper = cloudscraper.create_scraper()
+
+# دالة فحص الحالة المحدثة
+@app.route("/api/monitor-status")
+def monitor_status():
+    status_list = []
+    for site in TARGET_SITES:
+        try:
+            # استخدام scraper بدل requests
+            res = scraper.get(site["url"], timeout=10)
+            status = "OK" if res.status_code == 200 else f"Error ({res.status_code})"
+        except Exception as e:
+            status = "Offline"
+        status_list.append({"name": site['url'].split('/')[2], "status": status})
+    return jsonify(status_list)
+
+# دالة المراقبة التلقائية المحدثة
+def check_updates():
+    for site in TARGET_SITES:
+        try:
+            # استخدام scraper بدل requests
+            res = scraper.get(site["url"], timeout=15)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'html.parser')
+                item = soup.select_one(site["selector"])
+                if item:
+                    # منطق الإرسال هنا
+                    print(f"Scraped: {item.text.strip()}")
+        except: continue
 
 app = Flask(__name__)
 
