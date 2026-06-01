@@ -199,18 +199,30 @@
             fetchMessages();
         }
         function fetchMessages() {
-    // التأكد من أن currentPhone ليس فارغاً
     if (!currentPhone) return; 
 
     fetch(`/api/messages/${currentPhone}`)
     .then(res => res.json())
     .then(data => {
         const container = document.getElementById('messagesContainer');
-        container.innerHTML = data.messages.map(msg => `
-            <div class="msg-row ${msg.sender === 'me' ? 'me' : 'them'}">
-                <div class="bubble">${msg.message}</div>
-            </div>`).join('');
-    });
+        if (data.messages && data.messages.length > 0) {
+            container.innerHTML = data.messages.map(msg => `
+                <div class="msg-row ${msg.sender === 'me' ? 'me' : 'them'}">
+                    <div class="bubble">
+                        ${msg.message}
+                        <div class="meta-container">
+                            <span class="time-text">${msg.msg_time || ''}</span>
+                        </div>
+                    </div>
+                </div>`).join('');
+            
+            // سكرول تلقائي لأسفل
+            container.scrollTop = container.scrollHeight;
+        } else {
+            container.innerHTML = '<div style="text-align:center; color:#8696a0;">لا توجد رسائل</div>';
+        }
+    })
+    .catch(err => console.error("Error:", err));
 }
         
        function sendMessage(e) {
