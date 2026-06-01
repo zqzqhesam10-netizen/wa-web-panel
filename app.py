@@ -64,9 +64,17 @@ def home(): return render_template("chat.html")
 
 @app.route("/api/users")
 def get_users():
-    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM users ORDER BY phone"); rows = cur.fetchall(); cur.close(); conn.close()
-    return jsonify(rows)
+    try:
+        conn = db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users ORDER BY phone")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        # نرجع البيانات داخل مفتاح 'users' لسهولة الوصول إليها في الـ JS
+        return jsonify({"users": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/send", methods=["POST"])
 def send():
