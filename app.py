@@ -1,62 +1,56 @@
 from flask import Flask, request, jsonify, render_template
-import sqlite3
-import requests
 import os
 import threading
 import time
 from datetime import datetime
+import requests
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
 
 # ================= CONFIG =================
-ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
-PHONE_NUMBER_ID = "1171944939327803"
-VERIFY_TOKEN = "mytoken123"
+ACCESS_TOKEN = os.environ.get("EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD")
+PHONE_NUMBER_ID = os.environ.get("1171944939327803")
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "mytoken123")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
 
-# ================= STORAGE (FIXED) =================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
 
-DB_PATH = os.path.join(DATA_DIR, "chat.db")
-STATE_FILE = os.path.join(DATA_DIR, "state.txt")
-
-
+# ================= DB =================
 def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(DATABASE_URL)
 
 
 def init_db():
-    os.makedirs(DATA_DIR, exist_ok=True)
-
     conn = db()
-    c = conn.cursor()
+    cur = conn.cursor()
 
-    c.execute("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         phone TEXT PRIMARY KEY
     )
     """)
 
-    c.execute("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         phone TEXT,
         message TEXT,
         sender TEXT,
         msg_time TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
     conn.commit()
+    cur.close()
     conn.close()
 
 
 init_db()
+
 
 # ================= WHATSAPP =================
 def send_message(phone, message):
@@ -74,94 +68,66 @@ def send_message(phone, message):
         "text": {"body": message}
     }
 
-    r = requests.post(url, headers=headers, json=data)
-
-    print("STATUS:", r.status_code)
-    print("RESPONSE:", r.text)
+    requests.post(url, headers=headers, json=data)
 
 
-# ================= MONITOR =================
-def fetch_page():
-    return requests.get(TARGET_URL, timeout=20).text
-
-
-def fingerprint(html):
-    return str(hash(html[:2000]))
-
-
-def get_state():
-    if not os.path.exists(STATE_FILE):
-        return ""
-    return open(STATE_FILE).read()
-
-
-def save_state(s):
-    with open(STATE_FILE, "w") as f:
-        f.write(s)
-
-
-def check_updates():
-    try:
-        html = fetch_page()
-        new_fp = fingerprint(html)
-        old_fp = get_state()
-
-        if new_fp != old_fp:
-            print(" Update detected")
-            save_state(new_fp)
-
-            conn = db()
-            c = conn.cursor()
-            c.execute("SELECT phone FROM users")
-            users = c.fetchall()
-            conn.close()
-
-            for u in users:
-                send_message(u["phone"], " تم اكتشاف تحديث جديد")
-
-    except Exception as e:
-        print("monitor error:", e)
-
-
-def loop():
-    while True:
-        check_updates()
-        time.sleep(180)
-
-
-def start_monitor():
-    threading.Thread(target=loop, daemon=True).start()
-
-
-# ================= ROUTES =================
-@app.route("/")
-def home():
-    return render_template("chat.html")
-
-
-@app.route("/chat")
-def chat():
-    return render_template("chat.html")
-
-
+# ================= USERS =================
 @app.route("/api/users")
 def users():
     conn = db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users")
-    data = c.fetchall()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute("SELECT * FROM users ORDER BY phone")
+    rows = cur.fetchall()
+
+    cur.close()
     conn.close()
-    return jsonify([dict(x) for x in data])
+
+    return jsonify(rows)
 
 
+@app.route("/api/add_user", methods=["POST"])
+def add_user():
+    phone = request.form.get("phone")
+
+    if not phone:
+        return jsonify({"status": "error"})
+
+    conn = db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO users(phone)
+        VALUES(%s)
+        ON CONFLICT (phone) DO NOTHING
+    """, (phone,))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "ok"})
+
+
+# ================= MESSAGES =================
 @app.route("/api/messages/<phone>")
 def messages(phone):
     conn = db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM messages WHERE phone=? ORDER BY id ASC", (phone,))
-    data = c.fetchall()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute("""
+        SELECT *
+        FROM messages
+        WHERE phone=%s
+        ORDER BY id ASC
+    """, (phone,))
+
+    rows = cur.fetchall()
+
+    cur.close()
     conn.close()
-    return jsonify([dict(x) for x in data])
+
+    return jsonify({"messages": rows})
 
 
 @app.route("/send", methods=["POST"])
@@ -172,27 +138,58 @@ def send():
     send_message(phone, message)
 
     conn = db()
-    c = conn.cursor()
+    cur = conn.cursor()
 
-    c.execute("""
-        INSERT INTO messages (phone, message, sender, msg_time)
-        VALUES (?, ?, 'me', ?)
+    cur.execute("""
+        INSERT INTO messages(phone,message,sender,msg_time)
+        VALUES(%s,%s,'me',%s)
     """, (phone, message, datetime.now().strftime("%H:%M")))
 
     conn.commit()
-    conn.close()
-
-    conn = db()
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
-    conn.commit()
+    cur.close()
     conn.close()
 
     return jsonify({"status": "ok"})
 
 
+# ================= BROADCAST (FIX BUTTON) =================
+@app.route("/api/broadcast", methods=["POST"])
+def broadcast():
+
+    message = request.form.get("message")
+
+    conn = db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute("SELECT phone FROM users")
+    users = cur.fetchall()
+
+    sent = 0
+
+    for u in users:
+        phone = u["phone"]
+
+        send_message(phone, message)
+
+        cur2 = conn.cursor()
+        cur2.execute("""
+            INSERT INTO messages(phone,message,sender,msg_time)
+            VALUES(%s,%s,'me',%s)
+        """, (phone, message, datetime.now().strftime("%H:%M")))
+
+        conn.commit()
+        sent += 1
+
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "ok", "sent_count": sent})
+
+
+# ================= WEBHOOK =================
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
+
     if request.method == "GET":
         if request.args.get("hub.verify_token") == VERIFY_TOKEN:
             return request.args.get("hub.challenge")
@@ -206,26 +203,57 @@ def webhook():
         text = msg["text"]["body"]
 
         conn = db()
-        c = conn.cursor()
+        cur = conn.cursor()
 
-        c.execute("""
-            INSERT INTO messages (phone, message, sender, msg_time)
-            VALUES (?, ?, 'them', ?)
+        cur.execute("""
+            INSERT INTO messages(phone,message,sender,msg_time)
+            VALUES(%s,%s,'them',%s)
         """, (phone, text, datetime.now().strftime("%H:%M")))
 
-        conn.commit()
-        conn.close()
+        cur.execute("""
+            INSERT INTO users(phone)
+            VALUES(%s)
+            ON CONFLICT DO NOTHING
+        """, (phone,))
 
-        conn = db()
-        c = conn.cursor()
-        c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
         conn.commit()
+        cur.close()
         conn.close()
 
     except Exception as e:
         print("webhook error:", e)
 
     return "ok"
+
+
+# ================= MONITOR =================
+def check_updates():
+    try:
+        html = requests.get(TARGET_URL, timeout=20).text
+        print("monitor OK")
+    except Exception as e:
+        print(e)
+
+
+def loop():
+    while True:
+        check_updates()
+        time.sleep(180)
+
+
+def start_monitor():
+    threading.Thread(target=loop, daemon=True).start()
+
+
+# ================= FRONT =================
+@app.route("/")
+def home():
+    return render_template("chat.html")
+
+
+@app.route("/chat")
+def chat():
+    return render_template("chat.html")
 
 
 # ================= START =================
