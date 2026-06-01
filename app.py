@@ -6,7 +6,6 @@ from datetime import datetime
 import requests
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
@@ -16,33 +15,41 @@ PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# ================= SOURCES =================
-SOURCES = [
-    "https://web6112x.faselhdx.bid/recent_series",
-    "https://w1.anime4up.rest/episode/",
-    "https://m.asd.ink/category/foreign-movies-14/",
-    "https://m.asd.ink/category/asian-movies-2/",
-    "https://m.asd.ink/category/turkish-movies/",
-    "https://m.asd.ink/category/arabic-movies-14/",
-    "https://m.asd.ink/category/indian-movies-2/",
-    "https://5tv.lol/new-episodes/"
-]
+TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
 
-last_seen = {}
 
 # ================= DB =================
 def db():
     return psycopg2.connect(DATABASE_URL)
 
 
-def get_all_users():
+def init_db():
     conn = db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT phone FROM users")
-    users = cur.fetchall()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        phone TEXT PRIMARY KEY
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        phone TEXT,
+        message TEXT,
+        sender TEXT,
+        msg_time TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    conn.commit()
     cur.close()
     conn.close()
-    return users
+
+
+init_db()
 
 
 # ================= WHATSAPP =================
@@ -64,74 +71,168 @@ def send_message(phone, message):
     requests.post(url, headers=headers, json=data)
 
 
-# ================= SCRAPER =================
-def get_latest_item(url):
+# ================= USERS =================
+@app.route("/api/users")
+def users():
+    conn = db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute("SELECT * FROM users ORDER BY phone")
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return jsonify(rows)
+
+
+@app.route("/api/add_user", methods=["POST"])
+def add_user():
+    phone = request.form.get("phone")
+
+    if not phone:
+        return jsonify({"status": "error"})
+
+    conn = db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO users(phone)
+        VALUES(%s)
+        ON CONFLICT (phone) DO NOTHING
+    """, (phone,))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "ok"})
+
+
+# ================= MESSAGES =================
+@app.route("/api/messages/<phone>")
+def messages(phone):
+    conn = db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute("""
+        SELECT *
+        FROM messages
+        WHERE phone=%s
+        ORDER BY id ASC
+    """, (phone,))
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return jsonify({"messages": rows})
+
+
+@app.route("/send", methods=["POST"])
+def send():
+    phone = request.form.get("phone")
+    message = request.form.get("message")
+
+    send_message(phone, message)
+
+    conn = db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO messages(phone,message,sender,msg_time)
+        VALUES(%s,%s,'me',%s)
+    """, (phone, message, datetime.now().strftime("%H:%M")))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "ok"})
+
+
+# ================= BROADCAST (FIX BUTTON) =================
+@app.route("/api/broadcast", methods=["POST"])
+def broadcast():
+
+    message = request.form.get("message")
+
+    conn = db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute("SELECT phone FROM users")
+    users = cur.fetchall()
+
+    sent = 0
+
+    for u in users:
+        phone = u["phone"]
+
+        send_message(phone, message)
+
+        cur2 = conn.cursor()
+        cur2.execute("""
+            INSERT INTO messages(phone,message,sender,msg_time)
+            VALUES(%s,%s,'me',%s)
+        """, (phone, message, datetime.now().strftime("%H:%M")))
+
+        conn.commit()
+        sent += 1
+
+    cur.close()
+    conn.close()
+
+    return jsonify({"status": "ok", "sent_count": sent})
+
+
+# ================= WEBHOOK =================
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+
+    if request.method == "GET":
+        if request.args.get("hub.verify_token") == VERIFY_TOKEN:
+            return request.args.get("hub.challenge")
+        return "error", 403
+
     try:
-        r = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-        soup = BeautifulSoup(r.text, "html.parser")
+        data = request.json
+        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
 
-        for a in soup.find_all("a"):
-            title = a.get_text(strip=True)
-            href = a.get("href")
+        phone = msg["from"]
+        text = msg["text"]["body"]
 
-            if title and href:
-                return f"{title} | {href}"
+        conn = db()
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO messages(phone,message,sender,msg_time)
+            VALUES(%s,%s,'them',%s)
+        """, (phone, text, datetime.now().strftime("%H:%M")))
+
+        cur.execute("""
+            INSERT INTO users(phone)
+            VALUES(%s)
+            ON CONFLICT DO NOTHING
+        """, (phone,))
+
+        conn.commit()
+        cur.close()
+        conn.close()
 
     except Exception as e:
-        print("SCRAPER ERROR:", url, e)
+        print("webhook error:", e)
 
-    return None
-
-
-# ================= INITIAL TEST =================
-def send_initial_updates():
-    users = get_all_users()
-
-    print("INIT USERS:", len(users))
-
-    if not users:
-        print("NO USERS FOUND")
-        return
-
-    for url in SOURCES:
-        latest = get_latest_item(url)
-
-        print("INIT:", url, latest)
-
-        if not latest:
-            continue
-
-        last_seen[url] = latest
-
-        message = f"🧪 تجربة تشغيل:\n{latest}\n\n🌐 المصدر:\n{url}"
-
-        for u in users:
-            print("SEND TEST TO:", u["phone"])
-            send_message(u["phone"], message)
+    return "ok"
 
 
 # ================= MONITOR =================
 def check_updates():
-    users = get_all_users()
-
-    print("CHECK USERS:", len(users))
-
-    for url in SOURCES:
-        latest = get_latest_item(url)
-
-        print("CHECK:", url, latest)
-
-        if not latest:
-            continue
-
-        if last_seen.get(url) != latest:
-            last_seen[url] = latest
-
-            message = f"📢 تحديث جديد:\n{latest}\n\n🌐 المصدر:\n{url}"
-
-            for u in users:
-                print("SEND:", u["phone"])
-                send_message(u["phone"], message)
+    try:
+        html = requests.get(TARGET_URL, timeout=20).text
+        print("monitor OK")
+    except Exception as e:
+        print(e)
 
 
 def loop():
@@ -141,21 +242,10 @@ def loop():
 
 
 def start_monitor():
-    print("MONITOR STARTED")
-
-    # 🔥 إرسال تجربة عند التشغيل
-    send_initial_updates()
-
-    # تشغيل المراقبة
     threading.Thread(target=loop, daemon=True).start()
 
 
-# ================= WEB =================
-@app.route("/debug_users")
-def debug_users():
-    return jsonify(get_all_users())
-
-
+# ================= FRONT =================
 @app.route("/")
 def home():
     return render_template("chat.html")
