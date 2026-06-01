@@ -71,7 +71,20 @@ def webhook():
 def force_check():
     threading.Thread(target=check_updates).start()
     return "✅ تم بدء الفحص، ستصل الرسائل قريباً."
+    
+# بدلاً من الكود الذي سبب الخطأ، استخدم دالة عادية للمراقبة
+def run_monitor():
+    while True:
+        check_updates()
+        time.sleep(600)  # فحص كل 10 دقائق
+
+# تشغيل المراقبة فقط إذا كان السيرفر يعمل كعملية مستقلة 
+# وليس داخل Gunicorn (لأن Gunicorn سيتولى إدارة التطبيق)
+if __name__ != "__main__":
+    # هذا الجزء يعمل فقط عند استخدام Gunicorn
+    threading.Thread(target=run_monitor, daemon=True).start()
 
 if __name__ == "__main__":
-    threading.Thread(target=lambda: [check_updates(), time.sleep(600) for _ in iter(int, 1)], daemon=True).start()
+    # هذا الجزء يعمل إذا قمت بتشغيل السيرفر محلياً بـ python app.py
+    threading.Thread(target=run_monitor, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
