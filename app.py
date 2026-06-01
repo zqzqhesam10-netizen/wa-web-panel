@@ -128,21 +128,35 @@ def webhook():
             return request.args.get("hub.challenge")
         return "error", 403
 
-    data = request.json
-
     try:
+        data = request.json
         msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
+
         phone = msg["from"]
         text = msg["text"]["body"]
 
         conn = db()
         cur = conn.cursor()
 
-        cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
-        conn.commit()
+        # حفظ المستخدم
+        cur.execute("""
+            INSERT INTO users(phone)
+            VALUES(%s)
+            ON CONFLICT DO NOTHING
+        """, (phone,))
 
-    except:
-        pass
+        # 🔥 حفظ الرسالة (مهم)
+        cur.execute("""
+            INSERT INTO messages(phone,message,sender,msg_time)
+            VALUES(%s,%s,'them',%s)
+        """, (phone, text, datetime.now().strftime("%H:%M")))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print("webhook error:", e)
 
     return "ok"
 
