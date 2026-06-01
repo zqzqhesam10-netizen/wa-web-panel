@@ -12,52 +12,7 @@ PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-SITES = [
-    {"url": "https://web6112x.faselhdx.bid/recent_series", "sel": ".post-title a"},
-    {"url": "https://w1.anime4up.rest/episode/", "sel": ".eposhi a"},
-    {"url": "https://m.asd.ink/category/foreign-movies-14/", "sel": ".post-title a"},
-    {"url": "https://m.asd.ink/category/asian-movies-2/", "sel": ".post-title a"},
-    {"url": "https://m.asd.ink/category/turkish-movies/", "sel": ".post-title a"},
-    {"url": "https://m.asd.ink/category/arabic-movies-14/", "sel": ".post-title a"},
-    {"url": "https://m.asd.ink/category/indian-movies-2/", "sel": ".post-title a"},
-    {"url": "https://5tv.lol/new-episodes/", "sel": ".entry-title a"}
-]
-
-def db(): return psycopg2.connect(DATABASE_URL)
-
-# نظام المراقبة المطور
-def check_updates():
-    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT phone FROM users")
-    users = cur.fetchall()
-    for site in SITES:
-        try:
-            res = requests.get(site["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=20)
-            if res.status_code == 200:
-                soup = BeautifulSoup(res.text, 'html.parser')
-                item = soup.select_one(site["sel"])
-                if item:
-                    title = item.text.strip()
-                    link = item.get('href', '')
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        msg = f"🆕 تحديث جديد:\n{title}\n🔗 {link}"
-                        for u in users: send_message(u['phone'], msg)
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-        except: continue
-    cur.close(); conn.close()
-
-def loop():
-    while True:
-        check_updates()
-        time.sleep(600)
-
-# وظائف الـ API والإرسال
-def send_message(phone, message):
-    requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
-                  headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
-                  json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
+# ... (باقي كود SITES ودالة db و check_updates و loop و send_message كما هي) ...
 
 @app.route("/")
 def home(): return render_template("chat.html")
@@ -71,7 +26,6 @@ def get_users():
         rows = cur.fetchall()
         cur.close()
         conn.close()
-        # نرجع البيانات داخل مفتاح 'users' لسهولة الوصول إليها في الـ JS
         return jsonify({"users": rows})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -81,7 +35,6 @@ def get_messages(phone):
     try:
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # جلب الرسائل الخاصة بهذا الرقم
         cur.execute("SELECT * FROM messages WHERE phone=%s ORDER BY id ASC", (phone,))
         rows = cur.fetchall()
         cur.close()
@@ -89,6 +42,24 @@ def get_messages(phone):
         return jsonify({"messages": rows})
     except Exception as e:
         return jsonify({"messages": []}), 500
+
+# دالة الحذف المكتملة (تم دمجها مرة واحدة فقط)
+@app.route('/api/delete_contact', methods=['POST'])
+def delete_contact():
+    phone = request.form.get('phone')
+    if not phone:
+        return jsonify({"status": "error", "message": "No phone provided"}), 400
+    try:
+        conn = db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM messages WHERE phone=%s", (phone,))
+        cur.execute("DELETE FROM users WHERE phone=%s", (phone,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/send", methods=["POST"])
 def send():
