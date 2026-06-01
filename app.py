@@ -95,15 +95,20 @@ def broadcast():
     for u in users: send_message(u["phone"], message)
     cur.close(); conn.close()
     return jsonify({"status": "ok", "sent_count": len(users)})
-
+    
 @app.route("/api/monitor-status")
 def monitor_status():
     status_list = []
+    # إضافة User-Agent لتبدو كأنها زيارة من متصفح حقيقي
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    
     for site in TARGET_SITES:
         try:
-            res = requests.get(site["url"], timeout=5)
-            status_list.append({"name": site['url'].split('/')[2], "status": "OK" if res.status_code == 200 else "Error"})
-        except: status_list.append({"name": site['url'].split('/')[2], "status": "Offline"})
+            res = requests.get(site["url"], headers=headers, timeout=10)
+            status = "OK" if res.status_code == 200 else f"Error ({res.status_code})"
+        except Exception as e:
+            status = "Offline"
+        status_list.append({"name": site['url'].split('/')[2], "status": status})
     return jsonify(status_list)
 
 @app.route("/webhook", methods=["GET", "POST"])
