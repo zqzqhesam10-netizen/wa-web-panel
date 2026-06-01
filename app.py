@@ -14,16 +14,19 @@ PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
 
 TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
-STATE_FILE = "state.txt"
 
-# ================= DB =================
+# ================= DB (PERSISTENT ON RENDER DISK) =================
+DB_PATH = "/var/data/chat.db"
+
 def db():
-    conn = sqlite3.connect("chat.db", check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
+    os.makedirs("/var/data", exist_ok=True)
+
     conn = db()
     c = conn.cursor()
 
@@ -49,27 +52,7 @@ def init_db():
 
 init_db()
 
-# ================= STATE =================
-def get_state():
-    if not os.path.exists(STATE_FILE):
-        return ""
-    return open(STATE_FILE, "r", encoding="utf-8").read()
-
-def save_state(data):
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        f.write(data)
-
-# ================= SIMPLE SCRAPER =================
-def fetch_page():
-    headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(TARGET_URL, headers=headers, timeout=20)
-    return r.text
-
-
-def simple_fingerprint(html):
-    return str(hash(html[:2000]))
-
-# ================= WHATSAPP SEND =================
+# ================= WHATSAPP =================
 def send_message(phone, message):
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
@@ -88,15 +71,34 @@ def send_message(phone, message):
     requests.post(url, headers=headers, json=data)
 
 # ================= MONITOR =================
+def fetch_page():
+    return requests.get(TARGET_URL, timeout=20).text
+
+
+def fingerprint(html):
+    return str(hash(html[:2000]))
+
+
+STATE_FILE = "/var/data/state.txt"
+
+def get_state():
+    if not os.path.exists(STATE_FILE):
+        return ""
+    return open(STATE_FILE).read()
+
+def save_state(s):
+    with open(STATE_FILE, "w") as f:
+        f.write(s)
+
+
 def check_updates():
     try:
         html = fetch_page()
-        new_fp = simple_fingerprint(html)
+        new_fp = fingerprint(html)
         old_fp = get_state()
 
         if new_fp != old_fp:
-            print("🔥 New update detected")
-
+            print("🔥 Update detected")
             save_state(new_fp)
 
             conn = db()
@@ -109,13 +111,14 @@ def check_updates():
                 send_message(u["phone"], "🔥 تم اكتشاف تحديث جديد في الموقع")
 
     except Exception as e:
-        print("Monitor error:", e)
+        print("monitor error:", e)
 
 
 def loop():
     while True:
         check_updates()
         time.sleep(180)
+
 
 def start_monitor():
     threading.Thread(target=loop, daemon=True).start()
@@ -140,11 +143,13 @@ def users():
 @app.route("/api/add_user", methods=["POST"])
 def add_user():
     phone = request.form.get("phone")
+
     conn = db()
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
     conn.commit()
     conn.close()
+
     return jsonify({"status": "ok"})
 
 
@@ -161,6 +166,13 @@ def send():
         INSERT INTO messages (phone, message, sender, msg_time)
         VALUES (?, ?, 'me', ?)
     """, (phone, message, datetime.now().strftime("%H:%M")))
+    conn.commit()
+    conn.close()
+
+    # حفظ رقم تلقائياً
+    conn = db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
     conn.commit()
     conn.close()
 
@@ -183,11 +195,36 @@ def webhook():
         if request.args.get("hub.verify_token") == VERIFY_TOKEN:
             return request.args.get("hub.challenge")
         return "error", 403
-    return "ok", 200
+
+    # استقبال الرسائل الواردة (مهم جداً)
+    try:
+        data = request.json
+        msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
+        phone = msg["from"]
+        text = msg["text"]["body"]
+
+        conn = db()
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO messages (phone, message, sender, msg_time)
+            VALUES (?, ?, 'them', ?)
+        """, (phone, text, datetime.now().strftime("%H:%M")))
+        conn.commit()
+        conn.close()
+
+        conn = db()
+        c = conn.cursor()
+        c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
+        conn.commit()
+        conn.close()
+
+    except:
+        pass
+
+    return "ok"
 
 
-# ================= MAIN =================
+# ================= START =================
 if __name__ == "__main__":
     start_monitor()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
