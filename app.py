@@ -76,6 +76,20 @@ def get_users():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/messages/<phone>", methods=['GET'])
+def get_messages(phone):
+    try:
+        conn = db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # جلب الرسائل الخاصة بهذا الرقم
+        cur.execute("SELECT * FROM messages WHERE phone=%s ORDER BY id ASC", (phone,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"messages": rows})
+    except Exception as e:
+        return jsonify({"messages": []}), 500
+
 @app.route("/send", methods=["POST"])
 def send():
     phone, message = request.form.get("phone"), request.form.get("message")
