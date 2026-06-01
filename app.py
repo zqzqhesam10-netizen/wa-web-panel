@@ -60,7 +60,7 @@ def init_db():
 init_db()
 
 
-# ================= WHATSAPP API =================def send_message(phone, message):
+def send_message(phone, message):
     print("🚀 SENDING MESSAGE...")
     print("TO:", phone)
     print("TOKEN:", ACCESS_TOKEN)
