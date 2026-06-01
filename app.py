@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 import os, threading, time, requests, psycopg2
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
@@ -10,7 +10,7 @@ app = Flask(__name__)
 SCRAPER_API_KEY = "0d4cd1bb9dc081ed9ecc41394e232b20"
 ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
 PHONE_NUMBER_ID = "1171944939327803"
-VERIFY_TOKEN = "mytoken123" # الرمز الذي طلبت مكانه
+VERIFY_TOKEN = "mytoken123"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 TARGET_SITES = [
@@ -32,23 +32,25 @@ def get_site_content(url):
     try: return requests.get('http://api.scraperapi.com/', params=payload, timeout=60)
     except: return None
 
-def send_message(phone, message):
-    url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-    requests.post(url, headers=headers, json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
+# دالة الفحص التي تطبع النتائج في السجلات (Logs)
+def check_updates():
+    print(f"--- فحص جديد: {datetime.now().strftime('%H:%M:%S')} ---")
+    for site in TARGET_SITES:
+        res = get_site_content(site["url"])
+        if res and res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            item = soup.select_one(site["selector"])
+            if item:
+                print(f"تم العثور على: {item.text.strip()} | الموقع: {site['url'].split('/')[2]}")
+        else:
+            print(f"فشل جلب: {site['url'].split('/')[2]}")
+
+def loop():
+    while True:
+        check_updates()
+        time.sleep(600) # فحص كل 10 دقائق
 
 # ROUTES
-@app.route("/")
-def home(): return render_template("chat.html")
-
-@app.route("/api/users")
-def users():
-    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM users ORDER BY phone")
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    return jsonify(rows)
-
 @app.route("/api/monitor-status")
 def monitor_status():
     status_list = []
@@ -58,40 +60,6 @@ def monitor_status():
         status_list.append({"name": site['url'].split('/')[2], "status": status})
     return jsonify(status_list)
 
-@app.route("/send", methods=["POST"])
-def send():
-    phone = request.form.get("phone"); message = request.form.get("message")
-    send_message(phone, message)
-    conn = db(); cur = conn.cursor()
-    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES(%s,%s,'me',%s)", (phone, message, datetime.now().strftime("%H:%M")))
-    conn.commit(); cur.close(); conn.close()
-    return jsonify({"status": "ok"})
-
-@app.route("/api/broadcast", methods=["POST"])
-def broadcast():
-    message = request.form.get("message")
-    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT phone FROM users"); users = cur.fetchall()
-    for u in users: send_message(u["phone"], message)
-    cur.close(); conn.close()
-    return jsonify({"status": "ok", "sent_count": len(users)})
-
-@app.route("/api/add_user", methods=["POST"])
-def add_user():
-    phone = request.form.get("phone")
-    conn = db(); cur = conn.cursor()
-    cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
-    conn.commit(); cur.close(); conn.close()
-    return jsonify({"status": "ok"})
-
-@app.route("/api/messages/<phone>")
-def messages(phone):
-    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM messages WHERE phone=%s ORDER BY id ASC", (phone,))
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    return jsonify({"messages": rows})
-
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -99,5 +67,9 @@ def webhook():
         return "error", 403
     return "ok"
 
+if __name__ != "__main__":
+    threading.Thread(target=loop, daemon=True).start()
+
 if __name__ == "__main__":
+    threading.Thread(target=loop, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
