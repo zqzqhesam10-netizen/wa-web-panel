@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import os, threading, time, requests, psycopg2
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
@@ -32,25 +32,18 @@ def get_site_content(url):
     try: return requests.get('http://api.scraperapi.com/', params=payload, timeout=60)
     except: return None
 
-# دالة الفحص التي تطبع النتائج في السجلات (Logs)
-def check_updates():
-    print(f"--- فحص جديد: {datetime.now().strftime('%H:%M:%S')} ---")
-    for site in TARGET_SITES:
-        res = get_site_content(site["url"])
-        if res and res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            item = soup.select_one(site["selector"])
-            if item:
-                print(f"تم العثور على: {item.text.strip()} | الموقع: {site['url'].split('/')[2]}")
-        else:
-            print(f"فشل جلب: {site['url'].split('/')[2]}")
+# ROUTES - تعريف المسارات في الأعلى
+@app.route("/")
+def home(): return render_template("chat.html")
 
-def loop():
-    while True:
-        check_updates()
-        time.sleep(600) # فحص كل 10 دقائق
+@app.route("/api/users")
+def users():
+    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM users ORDER BY phone")
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return jsonify(rows)
 
-# ROUTES
 @app.route("/api/monitor-status")
 def monitor_status():
     status_list = []
@@ -67,9 +60,15 @@ def webhook():
         return "error", 403
     return "ok"
 
-if __name__ != "__main__":
+# MONITORING - تشغيل المراقبة فقط إذا كنا في سيرفر الإنتاج
+def loop():
+    while True:
+        time.sleep(600)
+        print("--- فحص دوري ---")
+
+# تشغيل الخيط (Thread) لمرة واحدة فقط عند بدء التشغيل
+if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
     threading.Thread(target=loop, daemon=True).start()
 
 if __name__ == "__main__":
-    threading.Thread(target=loop, daemon=True).start()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    app.run(host="0.0.0.0", port=10000)
