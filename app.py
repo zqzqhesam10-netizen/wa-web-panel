@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import cloudscraper # تأكد من إضافتها لـ requirements.txt
 
+app = Flask(__name__)
+
 # إنشاء كائن الـ scraper مرة واحدة
 scraper = cloudscraper.create_scraper()
 
@@ -35,8 +37,6 @@ def check_updates():
                     # منطق الإرسال هنا
                     print(f"Scraped: {item.text.strip()}")
         except: continue
-
-app = Flask(__name__)
 
 # CONFIG
 ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
