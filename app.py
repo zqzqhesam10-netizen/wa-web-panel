@@ -9,23 +9,29 @@ from datetime import datetime
 app = Flask(__name__)
 
 # ================= CONFIG =================
-ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
-PHONE_NUMBER_ID = "1171944939327803"
-VERIFY_TOKEN = "mytoken123"
+ACCESS_TOKEN = os.getenv("EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD")
+PHONE_NUMBER_ID = os.getenv("1171944939327803")
+VERIFY_TOKEN = os.getenv("mytoken123")
 
 TARGET_URL = "https://web53118x.faselhdx.bid/recent_series"
 
-# ================= DB (PERSISTENT ON RENDER DISK) =================
-DB_PATH = "/var/data/chat.db"
+# ================= STORAGE PATH (FIXED FOR RENDER) =================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
 
+DB_PATH = os.path.join(DATA_DIR, "chat.db")
+STATE_FILE = os.path.join(DATA_DIR, "state.txt")
+
+
+# ================= INIT =================
 def db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    os.makedirs("/var/data", exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
 
     conn = db()
     c = conn.cursor()
@@ -50,10 +56,16 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 init_db()
 
-# ================= WHATSAPP =================
+
+# ================= WHATSAPP API =================
 def send_message(phone, message):
+    if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
+        print("Missing WhatsApp credentials")
+        return
+
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
     headers = {
@@ -68,9 +80,13 @@ def send_message(phone, message):
         "text": {"body": message}
     }
 
-    requests.post(url, headers=headers, json=data)
+    try:
+        requests.post(url, headers=headers, json=data, timeout=10)
+    except Exception as e:
+        print("send error:", e)
 
-# ================= MONITOR =================
+
+# ================= MONITOR SYSTEM =================
 def fetch_page():
     return requests.get(TARGET_URL, timeout=20).text
 
@@ -79,12 +95,12 @@ def fingerprint(html):
     return str(hash(html[:2000]))
 
 
-STATE_FILE = "/var/data/state.txt"
-
 def get_state():
     if not os.path.exists(STATE_FILE):
         return ""
-    return open(STATE_FILE).read()
+    with open(STATE_FILE, "r") as f:
+        return f.read()
+
 
 def save_state(s):
     with open(STATE_FILE, "w") as f:
@@ -122,6 +138,7 @@ def loop():
 
 def start_monitor():
     threading.Thread(target=loop, daemon=True).start()
+
 
 # ================= ROUTES =================
 @app.route("/")
@@ -169,7 +186,6 @@ def send():
     conn.commit()
     conn.close()
 
-    # حفظ رقم تلقائياً
     conn = db()
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (phone,))
@@ -196,7 +212,6 @@ def webhook():
             return request.args.get("hub.challenge")
         return "error", 403
 
-    # استقبال الرسائل الواردة (مهم جداً)
     try:
         data = request.json
         msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
@@ -218,8 +233,8 @@ def webhook():
         conn.commit()
         conn.close()
 
-    except:
-        pass
+    except Exception as e:
+        print("webhook error:", e)
 
     return "ok"
 
