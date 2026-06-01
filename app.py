@@ -57,7 +57,8 @@ def check_updates():
 
 # المسارات
 @app.route("/")
-def home(): return render_template("chat.html")
+def home():
+    return render_template("chat.html")
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
