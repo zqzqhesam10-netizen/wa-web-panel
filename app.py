@@ -27,61 +27,67 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
+# دالة إرسال النص (للرسائل العادية)
 def send_message(phone, message):
     try:
         requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
                       headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
                       json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
     except: pass
-        
+
+# دالة إرسال الصورة (جديدة)
+def send_image_message(phone, image_url, caption):
+    try:
+        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
+                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
+                      json={
+                          "messaging_product": "whatsapp",
+                          "to": phone,
+                          "type": "image",
+                          "image": {"link": image_url, "caption": caption}
+                      })
+    except: pass
+
 def check_updates():
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-            "Referer": "https://www.google.com/"
-        }
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
 
         for site in SITES:
             try:
                 res = requests.get(site["url"], headers=headers, timeout=15)
-                if res.status_code != 200:
-                    print(f"DEBUG: فشل الاتصال بـ {site['url']} (كود: {res.status_code})")
-                    continue
+                if res.status_code != 200: continue
                 
                 soup = BeautifulSoup(res.text, 'html.parser')
-                # البحث الذكي: نبحث عن أي رابط داخل الصفحة يحتوي على كلمات دالة
-                all_links = soup.find_all('a', href=True)
+                # البحث عن أول عنصر يحتوي على صورة ورابط وعنوان (حاوية)
+                # هذه الطريقة تبحث عن أي div أو article يحتوي على رابط وصورة
+                items = soup.find_all('div', class_=lambda x: x and ('post' in x or 'item' in x or 'episode' in x))
                 
-                found_item = None
-                for link in all_links:
-                    href = link['href']
-                    text = link.text.strip()
-                    # نبحث عن روابط تحتوي على كلمات تدل على الحلقات أو الأفلام
-                    if any(keyword in href.lower() or keyword in text.lower() for keyword in ['ep', 'episode', 'series', 'movie']):
-                        if len(text) > 5: # تجاهل الروابط القصيرة جداً
-                            found_item = {"title": text, "link": href if href.startswith('http') else site["url"] + href}
-                            break
-                
-                if found_item:
-                    title, link = found_item["title"], found_item["link"]
-                    print(f"DEBUG: تم العثور على خبر ذكي: {title}")
+                for item in items:
+                    img_tag = item.find('img')
+                    link_tag = item.find('a', href=True)
                     
-                    # إرسال تجريبي للجميع (كما اتفقنا للتأكد)
-                    msg = f"🆕 تحديث جديد:\n{title}\n🔗 {link}"
-                    for u in users:
-                        send_message(u['phone'], msg)
-                    
-                    # سجل الخبر في القاعدة لتجنب التكرار لاحقاً
-                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", (title, datetime.now().strftime("%H:%M")))
-                    conn.commit()
-                else:
-                    print(f"DEBUG: لم يجد النظام أي روابط في {site['url']}")
+                    if img_tag and link_tag:
+                        title = link_tag.get('title') or link_tag.text.strip()
+                        img_url = img_tag.get('src')
+                        link = link_tag['href']
+                        link = link if link.startswith('http') else site["url"].rstrip('/') + '/' + link.lstrip('/')
+                        
+                        if len(title) > 5:
+                            msg = f"📺 {title}\n🔗 {link}"
+                            # إرسال الصورة مع النص كـ caption
+                            for u in users:
+                                send_image_message(u['phone'], img_url, msg)
+                            
+                            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                        (title, datetime.now().strftime("%H:%M")))
+                            conn.commit()
+                            break # إرسال أول تحديث فقط
             except Exception as e:
-                print(f"DEBUG: خطأ في فحص الموقع {site['url']}: {e}")
+                print(f"DEBUG: خطأ في {site['url']}: {e}")
         cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ عام: {e}")
