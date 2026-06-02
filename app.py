@@ -64,7 +64,7 @@ def check_updates():
             title = link.get('title') or link.text.strip()
             
             # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
-            if title and "مسلسل" in title:
+            if title and "مسلسل" in title and any(char.isdigit() for char in title):
                 # محاولة العثور على صورة مرتبطة بهذا الرابط
                 img_tag = link.find('img')
                 if not img_tag:
