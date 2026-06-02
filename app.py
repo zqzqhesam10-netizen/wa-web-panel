@@ -58,42 +58,42 @@ def check_updates():
 
 def check_tuktukhd():
     try:
+        # الاتصال لجلب المستخدمين فقط
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
+        cur.close(); conn.close()
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
         res = requests.get("https://tuktukhd.com/recent/", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # البحث عن روابط المحتوى (تعتمد على هيكل tuktukhd)
-        for link in soup.find_all('a', href=True):
+        # جلب أول عنصر فقط في الموقع
+        link = soup.find('a', href=True, title=True) # يبحث عن أول رابط له عنوان
+        if link:
             title = link.get('title') or link.text.strip()
-            # استبعاد الروابط القصيرة أو غير المعبرة
-            if title and len(title) > 5:
-                
-                # التحقق من عدم التكرار في قاعدة البيانات
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                if not cur.fetchone():
-                    # محاولة العثور على صورة (داخل الرابط أو المجاورة)
-                    img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-                    
-                    if img_url and not img_url.endswith('.gif'):
-                        print(f"DEBUG: تم العثور على جديد في TuktukHD: {title}")
-                        msg = f"🆕 جديد TuktukHD:\n{title}"
-                        
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        break # نكتفي بأول عنصر جديد في هذه الجولة لضمان عدم الإزعاج
-        
-        cur.close(); conn.close()
+            item_url = link['href']
+            
+            # محاولة جلب الصورة
+            img_tag = link.find('img') or link.find_previous('img')
+            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+            
+            print(f"DEBUG: إرسال فوري للمحتوى: {title}")
+            msg = f"🆕 جديد TuktukHD:\n{title}\n{item_url}"
+            
+            # الإرسال للجميع فوراً
+            for u in users:
+                if img_url and not img_url.endswith('.gif'):
+                    send_image_message(u['phone'], img_url, msg)
+                else:
+                    send_message(u['phone'], msg)
+            
+            print("DEBUG: تم الإرسال للجميع بنجاح.")
+        else:
+            print("DEBUG: لم يتم العثور على أي محتوى.")
+
     except Exception as e:
-        print(f"DEBUG: خطأ في فحص TuktukHD: {e}")
+        print(f"DEBUG: خطأ في الفحص الفوري: {e}")
         
 def loop():
     while True:
