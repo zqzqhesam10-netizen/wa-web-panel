@@ -58,36 +58,34 @@ def check_updates():
         res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        found = False
-        # نبحث عن كل الروابط لأنها غالباً ما تحتوي على العناوين
-        for item in soup.find_all('a', title=True):
-            title = item.get('title', '').strip()
+        # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
+        # هذه الطريقة هي الأكثر ثباتاً لأنها لا تعتمد على الـ div أو الكلاسات
+        for link in soup.find_all('a', href=True):
+            title = link.get('title') or link.text.strip()
             
-            # الشرط الصارم
-            if "الموسم" in title and ("الحلقة" in title or "حلقة" in title):
+            # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
+            if title and "مسلسل" in title:
+                # محاولة العثور على صورة مرتبطة بهذا الرابط
+                img_tag = link.find('img')
+                if not img_tag:
+                    # إذا لم تكن الصورة داخل الرابط، نبحث في العناصر المجاورة
+                    img_tag = link.find_previous('img') or link.find_next('img')
                 
-                # البحث عن الصورة في نفس عنصر الرابط أو ما حوله
-                img_tag = item.find_next('img')
                 img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                 
                 if img_url and not img_url.endswith('.gif'):
+                    # التحقق من عدم التكرار
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        print(f"DEBUG: تم العثور على تحديث حقيقي: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن!"
-                        
+                        print(f"DEBUG: تم العثور على مسلسل ثابت: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
-                        found = True
                         break 
-        
-        if not found:
-            print("DEBUG: لم يتم العثور على تحديثات جديدة تطابق الشروط.")
-            
         cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
