@@ -48,56 +48,44 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-import cloudscraper
+from playwright.sync_api import sync_playwright
 
 def check_updates():
     try:
-        # بيانات البروكسي الأول من القائمة التي أرسلتها
-        proxy_ip = "38.154.203.95"
-        proxy_port = "5863"
-        proxy_user = "texqxavf"
-        proxy_pass = "fd5174zppvwi"
-        
-        # دمج البيانات في تنسيق صحيح
-        proxy_url = f"http://{proxy_user}:{proxy_pass}@{proxy_ip}:{proxy_port}"
-        
-        proxies = {
-            "http": proxy_url,
-            "https": proxy_url
-        }
-
-        # استخدام cloudscraper مع البروكسي
-        scraper = cloudscraper.create_scraper()
-        
-        url = "https://w1.anime4up.rest/episode/"
-        print("DEBUG: جاري المحاولة باستخدام البروكسي الأول...")
-        
-        # إضافة البروكسي هنا
-        res = scraper.get(url, proxies=proxies, timeout=30)
-        
-        soup = BeautifulSoup(res.text, 'html.parser')
-        
-        # البحث عن الحلقات
-        links = soup.find_all('a', href=True)
-        found = False
-        for link in links:
-            # الموقع يستخدم /episode/ للروابط
-            if '/episode/' in link['href']:
-                title = link.get_text(strip=True)
-                if title:
-                    print(f"DEBUG: تم العثور على حلقة: {title}")
-                    found = True
-        
-        if not found:
-            print(f"DEBUG: لم أجد حلقات. عنوان الصفحة: {soup.title.text if soup.title else 'لا يوجد'}")
+        print("DEBUG: جاري تشغيل المتصفح الحقيقي...")
+        with sync_playwright() as p:
+            # تشغيل متصفح خفي (Headless)
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            )
+            page = context.new_page()
             
+            # الدخول للموقع
+            page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
+            
+            # انتظار 10 ثوانٍ ليتم التحقق من أنك إنسان (تجاوز Just a moment)
+            page.wait_for_timeout(10000)
+            
+            # الحصول على محتوى الصفحة بعد تجاوز الحماية
+            html_content = page.content()
+            browser.close()
+            
+            # الآن نقوم بـ Parsing للـ HTML الذي حصلنا عليه
+            soup = BeautifulSoup(html_content, 'html.parser')
+            links = soup.find_all('a', href=True)
+            
+            found = False
+            for link in links:
+                if '/episode/' in link['href']:
+                    print(f"DEBUG: تم العثور على حلقة: {link.get_text(strip=True)}")
+                    found = True
+            
+            if not found:
+                print("DEBUG: تم تجاوز الحماية لكن لم يتم العثور على روابط.")
+                
     except Exception as e:
-        print(f"DEBUG: خطأ في استخدام البروكسي: {e}")
-        
-def loop():
-    while True:
-        check_updates()
-        time.sleep(60)
+        print(f"DEBUG: خطأ في Playwright: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
