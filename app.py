@@ -105,7 +105,14 @@ def add_user():
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
+@app.route("/api/force_check", methods=["POST"])
+def force_check():
+    # استدعاء دالة الفحص فوراً
+    check_updates()
+    return jsonify({"status": "تم الفحص والإرسال بنجاح"})
+
 @app.route("/webhook", methods=["GET", "POST"])
+
 def webhook():
     if request.method == "GET": return request.args.get("hub.challenge") if request.args.get("hub.verify_token") == VERIFY_TOKEN else "error", 403
     try:
