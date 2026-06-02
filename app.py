@@ -50,46 +50,41 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     url = "https://wecima.bar/category/مسلسلات-مدبلجة/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
-    }
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
     
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
+        # استخدام stream=True لتقليل الحمل على الرام
+        res = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(res.content, 'html.parser')
         
-        res = requests.get(url, headers=headers, timeout=20)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        
-        # استهداف البطاقات كما تظهر في image_2c15c4.jpg
         cards = soup.select('div.GridItem')
         
-        for card in cards:
-            # قراءة كل النص داخل البطاقة (يجمع العنوان والرقم معاً)
+        # معالجة أول 5 عناصر فقط في كل مرة لتجنب الـ Timeout
+        for card in cards[:5]:
             title = card.get_text(separator=' ', strip=True)
-            
-            # استخراج رابط الصورة
             img_tag = card.find('img')
             img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
             
-            # شرط الفلترة: يجب أن يحتوي النص على "مدبلج" وأي أرقام (للحلقات)
+            # الفلترة الذكية
             if "مدبلج" in title and any(char.isdigit() for char in title):
-                
+                # التحقق من قاعدة البيانات
+                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title[:100],))
+                
                 if not cur.fetchone():
                     print(f"DEBUG: تم اكتشاف حلقة مدبلجة: {title}")
-                    
                     msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
                     
+                    cur.execute("SELECT phone FROM users")
+                    users = cur.fetchall()
                     for u in users:
                         send_image_message(u['phone'], img_url, msg)
                     
                     cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                 (title[:100], datetime.now().strftime("%H:%M")))
                     conn.commit()
-        
-        cur.close(); conn.close()
+                cur.close(); conn.close()
+                
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
         
