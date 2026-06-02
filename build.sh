@@ -1,10 +1,8 @@
-
 #!/usr/bin/env bash
 set -o errexit
 
-# تثبيت المكتبات
+# 1. تثبيت المكتبات (بدون sudo)
 pip install -r requirements.txt
 
-# تحميل المتصفح وتثبيت المكتبات المعتمدة للنظام (مهم جداً للينكس على Render)
+# 2. تحميل المتصفح فقط (هذا لا يحتاج لصلاحيات root ويعمل في مجلد المستخدم)
 playwright install chromium
-playwright install-deps
