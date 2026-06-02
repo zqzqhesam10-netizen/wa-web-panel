@@ -58,7 +58,6 @@ def check_updates():
 
 def check_tuktukhd():
     try:
-        # الاتصال لجلب المستخدمين فقط
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
@@ -68,32 +67,37 @@ def check_tuktukhd():
         res = requests.get("https://tuktukhd.com/recent/", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # جلب أول عنصر فقط في الموقع
-        link = soup.find('a', href=True, title=True) # يبحث عن أول رابط له عنوان
-        if link:
-            title = link.get('title') or link.text.strip()
-            item_url = link['href']
-            
-            # محاولة جلب الصورة
-            img_tag = link.find('img') or link.find_previous('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-            
-            print(f"DEBUG: إرسال فوري للمحتوى: {title}")
-            msg = f"🆕 جديد TuktukHD:\n{title}\n{item_url}"
-            
-            # الإرسال للجميع فوراً
-            for u in users:
-                if img_url and not img_url.endswith('.gif'):
-                    send_image_message(u['phone'], img_url, msg)
-                else:
-                    send_message(u['phone'], msg)
-            
-            print("DEBUG: تم الإرسال للجميع بنجاح.")
-        else:
-            print("DEBUG: لم يتم العثور على أي محتوى.")
+        # استخدام سلكتور أكثر دقة بناءً على شكل الموقع (البحث عن الروابط داخل البطاقات)
+        # هذا السلكتور يبحث عن أي رابط داخل الـ div التي تحمل الكلاسات الشائعة في الموقع
+        items = soup.select('div.post-item a, div.card a, a.img-link')
+        
+        # إذا لم يجد، نجرب البحث عن أي روابط داخل المقالات
+        if not items:
+            items = soup.find_all('a', href=True)
 
+        found = False
+        for link in items:
+            title = link.get('title') or link.text.strip()
+            if title and len(title) > 10: # شرط لطول العنوان
+                item_url = link['href']
+                img_tag = link.find('img') or link.find_previous('img')
+                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                
+                print(f"DEBUG: تم العثور على: {title}")
+                msg = f"🆕 جديد TuktukHD:\n{title}\n{item_url}"
+                
+                # الإرسال الفوري للجميع
+                for u in users:
+                    if img_url: send_image_message(u['phone'], img_url, msg)
+                    else: send_message(u['phone'], msg)
+                
+                found = True
+                break # إرسال أول عنصر فقط ثم التوقف
+        
+        if not found:
+            print("DEBUG: لم يجد أي روابط مطابقة في الموقع.")
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص الفوري: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
         
 def loop():
     while True:
