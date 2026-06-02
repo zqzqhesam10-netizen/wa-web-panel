@@ -50,45 +50,42 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        print("DEBUG: جاري الفحص...")
+        print("DEBUG: بدء الفحص...")
         found_paths = glob.glob("/opt/render/project/src/.playwright/**/chrome", recursive=True)
         if not found_paths: raise Exception("لم يتم العثور على المتصفح")
         
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox", "--disable-setuid-sandbox"])
-            
-            # الرابط الذي نريد فحصه الآن
-            target_url = "https://w1.anime4up.rest/episode/"
-            selector = ".eposhi a"
-            
-            print(f"DEBUG: جاري زيارة: {target_url}")
+            browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox"])
             page = browser.new_page()
-            page.goto(target_url, timeout=60000)
-            page.wait_for_timeout(5000) # انتظار تحميل الموقع
+            page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
+            page.wait_for_timeout(5000)
             
             soup = BeautifulSoup(page.content(), 'html.parser')
-            items = soup.select(selector)
+            browser.close()
+            
+            # التعديل هنا: استهداف الرابط المباشر للبطاقة في الصفحة الرئيسية
+            # في الموقع، كل بطاقة حلقة هي عنصر <a> يحيط بالصورة
+            items = soup.select('div.anime-card a') 
             
             if items:
+                # أخذ أول حلقة (أحدث حلقة)
                 latest_ep = items[0].get_text(strip=True)
                 latest_link = items[0]['href']
-                print(f"DEBUG: تم العثور على حلقة: {latest_ep} - الرابط: {latest_link}")
-                # هنا سيتم إرسال الرسالة لكل المستخدمين
-                # إرسال الرسالة لكل المستخدمين في قاعدة البيانات
+                
+                # إضافة شرط لمنع التكرار (اختياري لكنه مهم)
+                print(f"DEBUG: تم العثور على: {latest_ep}")
+                
                 conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
                 cur.execute("SELECT phone FROM users")
                 users = cur.fetchall()
                 cur.close(); conn.close()
                 
-                msg = f"🔥 حلقة جديدة: {latest_ep}\nرابط: {latest_link}"
+                msg = f"🔥 حلقة جديدة:\n{latest_ep}\nالرابط: {latest_link}"
                 for user in users:
                     send_message(user['phone'], msg)
             else:
-                print("DEBUG: لم يتم العثور على أي حلقات باستخدام المحدد: {selector}")
+                print("DEBUG: لم يتم العثور على عناصر باستخدام div.anime-card a")
                 
-            browser.close()
-            print("DEBUG: انتهى الفحص.")
-            
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
 
