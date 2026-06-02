@@ -58,27 +58,32 @@ def check_updates():
         res = requests.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # طباعة كل ما يجده البوت لنعرف أين المشكلة
-        items = soup.find_all('div', class_='col-6')
-        print(f"DEBUG: البوت وجد {len(items)} بطاقة في الموقع")
+        # البحث عن جميع العناصر التي قد تحتوي على مسلسل
+        # المواقع عادة تضع المسلسلات في روابط داخل مربعات
+        items = soup.find_all('a') 
+        print(f"DEBUG: البوت وجد {len(items)} رابط في الصفحة")
 
-        for item in items:
-            title = item.get_text(strip=True).split('\n')[0].strip()
-            img_tag = item.find('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "لا يوجد صورة"
+        for link in items:
+            # فلتر: العنوان يجب أن يكون طويلاً بما يكفي ليكون اسم مسلسل
+            title = (link.get('title') or link.text).strip()
             
-            print(f"DEBUG: وجدنا: {title} | الصورة: {img_url}")
-
-            if title and img_url != "لا يوجد صورة":
+            # محاولة العثور على صورة داخل الرابط أو بعده مباشرة
+            img_tag = link.find('img') or link.find_next('img')
+            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+            
+            # نتحقق إذا كان الرابط فعلاً يحتوي على صورة لمسلسل
+            if len(title) > 10 and img_url:
+                print(f"DEBUG: وجدنا: {title}")
+                
                 msg = f"🇹🇷 {title}\n🔥 متاح الآن!"
                 for u in users:
                     send_image_message(u['phone'], img_url, msg)
                 
-                # إضافة تسجيل بسيط بدون شرط التكرار
+                # تسجيل العملية
                 cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                             (title, datetime.now().strftime("%H:%M")))
                 conn.commit()
-                # حذفنا الـ break لنرى هل يقرأ كل شيء
+                break # نكتفي بأول مسلسل حقيقي وجدناه
         
         cur.close(); conn.close()
     except Exception as e:
