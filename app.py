@@ -62,34 +62,38 @@ def check_updates():
         users = cur.fetchall()
         
         for site in sites:
-            res = requests.get(site["url"], headers=headers, timeout=15)
-            soup = BeautifulSoup(res.text, 'html.parser')
-
-            for link in soup.find_all('a', href=True):
-                title = link.get('title') or link.text.strip()
+            try:
+                res = requests.get(site["url"], headers=headers, timeout=15)
+                soup = BeautifulSoup(res.text, 'html.parser')
                 
-                # منطق البحث (يدعم كلمة مسلسل أو مدبلج)
-                if title and ("مسلسل" in title or "مدبلج" in title) and any(char.isdigit() for char in title):
-                    img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                # البحث عن أول حلقة مطابقة في هذا الموقع
+                for link in soup.find_all('a', href=True):
+                    title = (link.get('title') or link.text).strip().split('\n')[0].strip()
                     
-                    if img_url and not img_url.endswith('.gif'):
-                        cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                        if not cur.fetchone():
-                            print(f"DEBUG: تم العثور على محتوى جديد من {site['name']}: {title}")
-                            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                            
-                            # الإرسال
-                            for u in users:
-                                send_image_message(u['phone'], img_url, msg)
-                            
-                            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                        (title, datetime.now().strftime("%H:%M")))
-                            conn.commit()
-                            break # نكتفي بأول نتيجة لكل موقع
+                    if title and ("مسلسل" in title or "مدبلج" in title) and any(char.isdigit() for char in title):
+                        img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                        
+                        if img_url and not img_url.endswith('.gif'):
+                            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                            if not cur.fetchone():
+                                print(f"DEBUG: تم العثور على محتوى جديد من {site['name']}: {title}")
+                                msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                                
+                                for u in users:
+                                    send_image_message(u['phone'], img_url, msg)
+                                
+                                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                            (title, datetime.now().strftime("%H:%M")))
+                                conn.commit()
+                                break # هذا الـ break ينهي البحث في الموقع الحالي فقط وينتقل للموقع التالي
+            except Exception as e:
+                print(f"Error checking {site['name']}: {e}")
+                continue # يكمل للموقع التالي حتى لو فشل الموقع الحالي
+                
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ عام: {e}")
 
 def loop():
     while True:
