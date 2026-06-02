@@ -48,29 +48,33 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
+import cloudscraper
+
 def check_updates():
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        scraper = cloudscraper.create_scraper()
         url = "https://w1.anime4up.rest/episode/"
-        res = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
-
-        print(f"DEBUG: --- فحص موقع Anime4up ---")
-        # فحص العناوين (غالباً تكون داخل class اسمه 'episodes-card-title' أو ما يشابهه)
-        for element in soup.find_all(['h2', 'h3', 'a']):
-            text = element.text.strip()
-            if len(text) > 5:
-                print(f"DEBUG: وجدت عنوان: {text}")
+        res = scraper.get(url, timeout=20)
         
-        # فحص الصور
-        for img in soup.find_all('img'):
-            src = img.get('src') or img.get('data-src')
-            if src:
-                print(f"DEBUG: وجدت صورة: {src}")
-                
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        # البحث عن العناصر التي تحتوي على روابط الحلقات
+        # في موقع Anime4up غالباً ما تكون الروابط تحتوي على /episode/
+        found_links = False
+        for link in soup.find_all('a', href=True):
+            if '/episode/' in link['href']:
+                title = link.get_text(strip=True)
+                if title:
+                    print(f"DEBUG: وجدت رابط حلقة: {title}")
+                    found_links = True
+        
+        if not found_links:
+            # إذا لم يجد شيئاً، نطبع عنوان الصفحة لنتأكد هل هو "خطأ 403" أم صفحة أخرى
+            print(f"DEBUG: لم أجد روابط حلقات. عنوان الصفحة: {soup.title.text if soup.title else 'لا يوجد عنوان'}")
+            
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
-
+        
 def loop():
     while True:
         check_updates()
