@@ -55,34 +55,34 @@ def check_updates():
         users = cur.fetchall()
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        site_url = "https://web6112x.faselhdx.bid/recent_series"
-        res = requests.get(site_url, headers=headers, timeout=15)
+        res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # الهيكل الجديد: نجد كل الـ div التي تحتوي على كلمة "مسلسل"
-        # هذه الطريقة ستجلب لنا فقط عناوين المسلسلات الجديدة
-        for div in soup.find_all('div', class_='post'):
-            title_tag = div.find('h3') or div.find('a', title=True)
-            img_tag = div.find('img')
-            
-            if title_tag:
-                title = title_tag.text.strip()
-                # التأكد أننا وجدنا مسلسلاً حقيقياً (يحتوي كلمة مسلسل)
-                if "مسلسل" in title:
-                    img_url = img_tag.get('data-src') or img_tag.get('src') # سحب الصورة الحقيقية
-                    
+        # البحث عن كل العناصر التي تحتوي على كلمة "مسلسل" في النص
+        found = False
+        for item in soup.find_all(True): # فحص كل العناصر
+            if item.string and "مسلسل" in item.string:
+                title = item.string.strip()
+                # محاولة العثور على صورة في العناصر المحيطة
+                parent = item.find_parent()
+                img_tag = parent.find_next('img') if parent else None
+                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+
+                if title and img_url:
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        print(f"DEBUG: إرسال تحديث: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                        
+                        print(f"DEBUG: تم العثور على تحديث: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن!"
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
-                        break # نكتفي بأول مسلسل جديد فقط
+                        found = True
+                        break 
+        if not found:
+            print("DEBUG: لم يتم العثور على أي تحديثات تطابق كلمة 'مسلسل'")
         cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
