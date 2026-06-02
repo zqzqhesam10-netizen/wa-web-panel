@@ -49,46 +49,47 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 def check_updates():
-    url = "https://wecima.bar/category/مسلسلات-مدبلجة/"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/146.0.0.0"}
+    sites = [
+        {"url": "https://web6112x.faselhdx.bid/recent_series", "name": "fasel"},
+        {"url": "https://wecima.bar/category/مسلسلات-مدبلجة/", "name": "wecima"}
+    ]
+    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
     
     try:
-        res = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        for link in soup.find_all('a', href=True):
-            title = link.get('title') or link.text.strip()
-            if title and "مدبلج" in title and any(char.isdigit() for char in title):
-                img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+        for site in sites:
+            res = requests.get(site["url"], headers=headers, timeout=15)
+            soup = BeautifulSoup(res.text, 'html.parser')
+
+            for link in soup.find_all('a', href=True):
+                title = link.get('title') or link.text.strip()
                 
-                if img_url:
-                    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        # --- بدلاً من الإرسال المباشر البطيء ---
-                        # نقوم بتشغيل الإرسال في خيط (Thread) منفصل
-                        def fast_send():
-                            # نفتح اتصال جديد خاص بالإرسال
-                            c = db(); cr = c.cursor(cursor_factory=RealDictCursor)
-                            cr.execute("SELECT phone FROM users LIMIT 50")
-                            users = cr.fetchall()
+                # منطق البحث (يدعم كلمة مسلسل أو مدبلج)
+                if title and ("مسلسل" in title or "مدبلج" in title) and any(char.isdigit() for char in title):
+                    img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                    
+                    if img_url and not img_url.endswith('.gif'):
+                        cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                        if not cur.fetchone():
+                            print(f"DEBUG: تم العثور على محتوى جديد من {site['name']}: {title}")
+                            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                            
+                            # الإرسال
                             for u in users:
-                                send_image_message(u['phone'], img_url, f"🎬 {title}\n🔥 متاح الآن!")
-                                time.sleep(0.2) # راحة قصيرة جداً
-                            cr.close(); c.close()
-                        
-                        threading.Thread(target=fast_send).start()
-                        
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        cur.close(); conn.close()
-                        break 
-                    cur.close(); conn.close()
-                break 
+                                send_image_message(u['phone'], img_url, msg)
+                            
+                            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                        (title, datetime.now().strftime("%H:%M")))
+                            conn.commit()
+                            break # نكتفي بأول نتيجة لكل موقع
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
 
 def loop():
     while True:
