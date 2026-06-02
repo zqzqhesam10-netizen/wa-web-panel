@@ -49,7 +49,6 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 def check_updates():
-    # تعريف المواقع التي سنفحصها
     sites = [
         {"url": "https://web6112x.faselhdx.bid/recent_series", "name": "fasel", "keyword": "مسلسل"},
         {"url": "https://wecima.bar/category/مسلسلات-مدبلجة/", "name": "wecima", "keyword": "مدبلج"}
@@ -63,33 +62,28 @@ def check_updates():
         users = cur.fetchall()
         
         for site in sites:
-            print(f"DEBUG: جاري فحص الموقع: {site['name']}")
             try:
                 res = requests.get(site["url"], headers=headers, timeout=15)
                 soup = BeautifulSoup(res.text, 'html.parser')
 
+                # البحث عن أول حلقة مطابقة
                 for link in soup.find_all('a', href=True):
                     title = (link.get('title') or link.text).strip().split('\n')[0].strip()
                     
-                    # البحث يعتمد على الكلمة المفتاحية المخصصة لكل موقع
                     if title and site['keyword'] in title and any(char.isdigit() for char in title):
                         img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                         
                         if img_url and not img_url.endswith('.gif'):
-                            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                            if not cur.fetchone():
-                                print(f"DEBUG: محتوى جديد من {site['name']}: {title}")
-                                msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                                
-                                for u in users:
-                                    send_image_message(u['phone'], img_url, msg)
-                                
-                                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                            (title, datetime.now().strftime("%H:%M")))
-                                conn.commit()
-                                # نكتفي بأول نتيجة لكل موقع ثم ننتقل للموقع التالي
-                                break 
+                            # تم حذف شرط التحقق من التكرار (cur.fetchone)
+                            print(f"DEBUG: إرسال الحلقة فوراً: {title}")
+                            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                            
+                            for u in users:
+                                send_image_message(u['phone'], img_url, msg)
+                            
+                            # اختيارياً: يمكننا حذف سطر تسجيل الرسالة في قاعدة البيانات إذا كنت لا تريده
+                            break 
             except Exception as e:
                 print(f"Error checking {site['name']}: {e}")
                 
