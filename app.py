@@ -50,46 +50,46 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        # فحص TuktukHD
-        check_tuktukhd()
-        # يمكنك إضافة استدعاءات أخرى هنا
-    except Exception as e:
-        print(f"DEBUG: خطأ في الدالة الرئيسية للتشغيل: {e}")
-
-from playwright.sync_api import sync_playwright
-
-def check_tuktukhd():
-    try:
-        # تغيير الرابط لنسخة الموبايل (عادة تكون أخف)
-        url = "https://m.tuktukhd.com/recent/"
-        # تحديث الـ Headers لتكون أكثر دقة
-        headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Referer": "https://m.tuktukhd.com/"
-        }
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        res = requests.get(url, headers=headers, timeout=10)
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
-        
-        # البحث عن العناصر الشائعة في النسخ الخفيفة
-        items = soup.find_all('a')
-        
-        for link in items:
-            href = link.get('href', '')
+
+        # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
+        # هذه الطريقة هي الأكثر ثباتاً لأنها لا تعتمد على الـ div أو الكلاسات
+        for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
             
-            # فلترة ذكية: الرابط يحتوي على كلمة مسلسل أو فيلم والاسم طوله معقول
-            if len(title) > 10 and ('/video/' in href or '/movie/' in href):
-                print(f"DEBUG: تم العثور على محتوى خفيف: {title}")
-                # إرسال...
-                return
+            # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
+            if title and "مسلسل" in title and any(char.isdigit() for char in title):
+                # محاولة العثور على صورة مرتبطة بهذا الرابط
+                img_tag = link.find('img')
+                if not img_tag:
+                    # إذا لم تكن الصورة داخل الرابط، نبحث في العناصر المجاورة
+                    img_tag = link.find_previous('img') or link.find_next('img')
                 
-        print("DEBUG: لم يتم العثور على أي شيء حتى عبر نسخة الموبايل.")
+                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                
+                if img_url and not img_url.endswith('.gif'):
+                    # التحقق من عدم التكرار
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                    if not cur.fetchone():
+                        print(f"DEBUG: تم العثور على مسلسل ثابت: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        for u in users:
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (title, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        break 
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ خفيف: {e}")
-        
+        print(f"DEBUG: خطأ في الفحص: {e}")
+
 def loop():
     while True:
         check_updates()
