@@ -53,33 +53,34 @@ def check_updates():
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
     
     try:
-        res = requests.get(url, headers=headers, timeout=15)
+        res = requests.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(res.content, 'html.parser')
         cards = soup.select('div.GridItem')
         
-        # فحص أول 5 حلقات كما يراها البوت الآن
+        # فحص أول 5 حلقات فقط لضمان الأداء
         for card in cards[:5]:
             title = card.get_text(separator=' ', strip=True)
             img_tag = card.find('img')
             img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
             
-            # شرط الإرسال المباشر (مدبلج + رقم حلقة)
             if "مدبلج" in title and any(char.isdigit() for char in title):
                 print(f"DEBUG: إرسال مباشر للحلقة: {title}")
                 msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
                 
-                # جلب المستخدمين والإرسال مباشرة بدون فحص قاعدة البيانات
-                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+                conn = db()
+                cur = conn.cursor(cursor_factory=RealDictCursor)
                 cur.execute("SELECT phone FROM users")
                 users = cur.fetchall()
+                cur.close()
+                conn.close()
                 
+                # الإرسال مع تأخير لمنع الانهيار (SIGKILL)
                 for u in users:
                     send_image_message(u['phone'], img_url, msg)
-                
-                cur.close(); conn.close()
+                    time.sleep(2) # تأخير 2 ثانية بين كل رسالة لتهدئة السيرفر
                 
     except Exception as e:
-        print(f"DEBUG: خطأ أثناء الفحص: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
         
 def loop():
     while True:
