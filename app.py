@@ -49,31 +49,34 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 import cloudscraper
+import time
 
 def check_updates():
     try:
-        scraper = cloudscraper.create_scraper()
+        scraper = cloudscraper.create_scraper(delay=10) # إضافة تأخير 10 ثوانٍ للتحقق
         url = "https://w1.anime4up.rest/episode/"
-        res = scraper.get(url, timeout=20)
+        
+        print("DEBUG: جاري محاولة الدخول وتجاوز الحماية...")
+        res = scraper.get(url, timeout=30)
         
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # البحث عن العناصر التي تحتوي على روابط الحلقات
-        # في موقع Anime4up غالباً ما تكون الروابط تحتوي على /episode/
-        found_links = False
-        for link in soup.find_all('a', href=True):
-            if '/episode/' in link['href']:
-                title = link.get_text(strip=True)
-                if title:
-                    print(f"DEBUG: وجدت رابط حلقة: {title}")
-                    found_links = True
+        # لنرى العنوان الجديد الآن بعد التأخير
+        print(f"DEBUG: عنوان الصفحة الحالي: {soup.title.text if soup.title else 'لا يوجد عنوان'}")
         
-        if not found_links:
-            # إذا لم يجد شيئاً، نطبع عنوان الصفحة لنتأكد هل هو "خطأ 403" أم صفحة أخرى
-            print(f"DEBUG: لم أجد روابط حلقات. عنوان الصفحة: {soup.title.text if soup.title else 'لا يوجد عنوان'}")
+        # فحص الروابط
+        links = soup.find_all('a', href=True)
+        count = 0
+        for link in links:
+            if '/episode/' in link['href']:
+                print(f"DEBUG: وجدت رابط: {link.get_text(strip=True)}")
+                count += 1
+        
+        if count == 0:
+            print("DEBUG: ما زالت الحماية تمنعنا أو الهيكل مختلف.")
             
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ في تجاوز الحماية: {e}")
         
 def loop():
     while True:
