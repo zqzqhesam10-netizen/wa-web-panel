@@ -64,38 +64,33 @@ def check_tuktukhd():
         cur.close(); conn.close()
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("https://tuktukhd.com/recent/", headers=headers, timeout=15)
+        res = requests.get("https://tuktukhd.com/recent/", headers=headers, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # استخدام سلكتور أكثر دقة بناءً على شكل الموقع (البحث عن الروابط داخل البطاقات)
-        # هذا السلكتور يبحث عن أي رابط داخل الـ div التي تحمل الكلاسات الشائعة في الموقع
-        items = soup.select('div.post-item a, div.card a, a.img-link')
+        # البحث عن كل الروابط التي تحتوي على كلمة 'film' أو 'series' أو تبدأ برابط العرض
+        # هذا يضمن أننا نجد الروابط حتى لو تغير تصميم الموقع
+        links = [a for a in soup.find_all('a', href=True) if '/video/' in a['href'] or '/movie/' in a['href']]
         
-        # إذا لم يجد، نجرب البحث عن أي روابط داخل المقالات
-        if not items:
-            items = soup.find_all('a', href=True)
+        if not links:
+            # إذا فشلنا، نجلب كل الروابط ونفلترها يدوياً
+            links = soup.find_all('a', href=True)
 
-        found = False
-        for link in items:
+        for link in links:
             title = link.get('title') or link.text.strip()
-            if title and len(title) > 10: # شرط لطول العنوان
-                item_url = link['href']
+            # شرط اختيار العنوان (يحتوي نصاً طويلاً ومعقولاً)
+            if title and len(title) > 15:
                 img_tag = link.find('img') or link.find_previous('img')
                 img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                 
-                print(f"DEBUG: تم العثور على: {title}")
-                msg = f"🆕 جديد TuktukHD:\n{title}\n{item_url}"
+                print(f"DEBUG: تم العثور على محتوى: {title}")
+                msg = f"🆕 جديد TuktukHD:\n{title}\n{link['href']}"
                 
-                # الإرسال الفوري للجميع
                 for u in users:
                     if img_url: send_image_message(u['phone'], img_url, msg)
                     else: send_message(u['phone'], msg)
-                
-                found = True
-                break # إرسال أول عنصر فقط ثم التوقف
+                return # نكتفي بأول رابط صالح وجدناه
         
-        if not found:
-            print("DEBUG: لم يجد أي روابط مطابقة في الموقع.")
+        print("DEBUG: لم يتم العثور على أي محتوى صالح.")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
         
