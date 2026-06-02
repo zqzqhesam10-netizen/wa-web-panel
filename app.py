@@ -61,47 +61,44 @@ def check_updates():
         users = cur.fetchall()
         
         res = requests.get(url, headers=headers, timeout=20)
+        print(f"DEBUG: حالة الموقع: {res.status_code} | طول الصفحة: {len(res.text)}")
+        
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # استهداف بطاقات العرض في وي سيما
-        # البطاقات في وي سيما غالباً داخل كلاس .GridItem
-        cards = soup.select('div.GridItem')
+        # كشف الهيكلية (في حال لم يجد أي بطاقة)
+        cards = soup.select('div.GridItem, div.post-item, .MoviePost')
+        print(f"DEBUG: تم العثور على {len(cards)} عنصر في الموقع.")
         
+        # إذا كان العدد 0، سنقوم بطباعة كلاسات الصفحة لنعرف التحديث
+        if len(cards) == 0:
+            print("DEBUG: لم يتم العثور على عناصر بالهيكل الحالي. طباعة بعض الكلاسات المتاحة:")
+            print([tag.get('class') for tag in soup.select('[class]')][:10])
+
         for card in cards:
             link = card.find('a', href=True)
             if not link: continue
             
             title = link.get('title') or link.text.strip()
             
-            # شرط صارم: يجب أن يكون العنوان يحتوي على "مدبلج" وأرقام (للحلقات)
+            # الفلترة
             if title and "مدبلج" in title and any(char.isdigit() for char in title):
-                
                 img_tag = card.find('img')
                 img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                 
                 if img_url:
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        print(f"DEBUG: تم اكتشاف حلقة مدبلجة من وي سيما: {title}")
-                        
-                        # رسالة مخصصة للمدبلج
+                        print(f"DEBUG: تم اكتشاف حلقة مدبلجة: {title}")
                         msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
-                        
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
-                        
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
-                        # لا نضع break هنا إذا أردت جلب أكثر من حلقة جديدة في نفس الفحص
         
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ أثناء فحص وي سيما: {e}")
-        
-        cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG: خطأ عام في دالة التحديث: {e}")
+        print(f"DEBUG: خطأ عام: {e}")
 
 def loop():
     while True:
