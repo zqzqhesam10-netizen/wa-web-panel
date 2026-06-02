@@ -12,13 +12,6 @@ PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-SITES = [
-    {"url": "https://web6112x.faselhdx.bid/recent_series", "sel": ".post-title a"},
-    {"url": "https://w1.anime4up.rest/episode/", "sel": ".eposhi a"},
-    {"url": "https://m.asd.ink/category/foreign-movies-14/", "sel": ".post-title a"},
-    {"url": "https://5tv.lol/new-episodes/", "sel": ".entry-title a"}
-]
-
 def db(): return psycopg2.connect(DATABASE_URL)
 
 def init_db():
@@ -53,30 +46,32 @@ def check_updates():
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
     
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.content, 'html.parser')
         cards = soup.select('div.GridItem')
         
         if not cards: return
         
-        # الحلقة الأخيرة فقط (بدون أي فحص إضافي)
+        # اختيار آخر حلقة (الأحدث)
         latest = cards[0]
         title = latest.get_text(separator=' ', strip=True)
-        img_url = latest.find('img').get('data-src') or latest.find('img').get('src')
+        img_tag = latest.find('img')
+        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
         
         if "مدبلج" in title:
             conn = db()
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT phone FROM users")
+            # جلب المستخدمين على دفعات لضمان عدم انهيار السيرفر
+            cur.execute("SELECT phone FROM users LIMIT 50") 
             users = cur.fetchall()
             cur.close(); conn.close()
             
-            # إرسال فوري بدون أي انتظار
+            # الإرسال المباشر
             for u in users:
-                send_image_message(u['phone'], img_url, f"🎬 {title}\n🔥 متاح الآن!")
+                send_image_message(u['phone'], img_url, f"🎬 {title}\n🔥 متاح الآن للمشاهدة!")
                 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in check_updates: {e}")
         
 def loop():
     while True:
