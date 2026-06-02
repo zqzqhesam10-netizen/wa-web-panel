@@ -48,33 +48,43 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-def check_updates():
+   def check_updates():
+    # هذا السطر يضمن تشغيل الفحص في الخلفية بالكامل
     try:
-        print("DEBUG: محاولة تحديد مسار المتصفح...")
-        # المسار الافتراضي لـ Playwright على Render
+        print("DEBUG: بدء الفحص في الخلفية...")
         browser_path = "/opt/render/project/src/.playwright/chromium-1223/chrome-linux64/chrome"
         
-        print(f"DEBUG: المسار المحدد هو: {browser_path}")
-        
-        # التأكد من وجود الملف قبل البدء
-        if not os.path.exists(browser_path):
-            print("DEBUG: خطأ: المسار غير موجود فعلياً!")
-            return
-
-        print("DEBUG: جاري إطلاق Playwright...")
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, executable_path=browser_path, args=["--no-sandbox", "--disable-setuid-sandbox"])
+            print("DEBUG: جاري إطلاق المتصفح...")
+            browser = p.chromium.launch(headless=True, executable_path=browser_path, args=["--no-sandbox"])
             page = browser.new_page()
             
-            print("DEBUG: جاري فتح الصفحة...")
+            print("DEBUG: جاري الانتقال للموقع...")
             page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
+            page.wait_for_timeout(5000)
             
-            content = page.content()
+            soup = BeautifulSoup(page.content(), 'html.parser')
             browser.close()
-            print("DEBUG: نجح الجلب!")
             
+            # استخراج البيانات
+            items = soup.select('div.anime-card a') 
+            if items:
+                latest_ep = items[0].get_text(strip=True)
+                latest_link = items[0]['href']
+                print(f"DEBUG: تم العثور على: {latest_ep}")
+                
+                # هنا يتم الإرسال
+                # ... (كود إرسال الواتساب) ...
+            else:
+                print("DEBUG: لم يتم العثور على حلقات.")
     except Exception as e:
-        print(f"DEBUG: خطأ في العملية: {str(e)}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
+
+@app.route("/api/force_check", methods=["POST"])
+def force_check():
+    # تشغيل الفحص في Thread منفصل لضمان استمرار السيرفر
+    threading.Thread(target=check_updates, daemon=True).start()
+    return jsonify({"status": "تم بدء الفحص في الخلفية"})
 
 def loop():
     while True:
