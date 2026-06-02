@@ -48,38 +48,26 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-from playwright.sync_api import sync_playwright
+  from playwright.sync_api import sync_playwright
 
 def check_updates():
     try:
-        print("DEBUG: جاري تشغيل المتصفح...")
+        print("DEBUG: جاري تشغيل المتصفح باستخدام Playwright...")
         with sync_playwright() as p:
-            # تحديد مسار المتصفح الذي تم تحميله في الـ Logs السابقة
-            executable_path = "/opt/render/.cache/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell"
-            
-            browser = p.chromium.launch(
-                headless=True,
-                executable_path=executable_path  # إجبار الكود على استخدام هذا المسار
-            )
-            
+            # هنا لن نضع مساراً يدوياً، وسنتركه يجد المتصفح تلقائياً بعد تثبيته عبر build.sh
+            browser = p.chromium.launch(headless=True)
             page = browser.new_page()
+            
+            # نحدد User-Agent ليظهر كمتصفح حقيقي
+            page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"})
+            
             page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
             page.wait_for_timeout(10000)
             
             soup = BeautifulSoup(page.content(), 'html.parser')
             browser.close()
             
-            # فحص الروابط
-            links = soup.find_all('a', href=True)
-            found = False
-            for link in links:
-                if '/episode/' in link['href']:
-                    print(f"DEBUG: تم العثور على حلقة: {link.get_text(strip=True)}")
-                    found = True
-            
-            if not found:
-                print("DEBUG: تم الوصول للموقع ولكن لم أجد روابط حلقات.")
-                
+            # ... (بقية كود الفحص) ...
     except Exception as e:
         print(f"DEBUG: خطأ في Playwright: {e}")
 
