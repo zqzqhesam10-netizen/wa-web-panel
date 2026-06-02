@@ -50,32 +50,23 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        print(f"DEBUG: تم العثور على {len(users)} مستخدم.") # للتأكد من قاعدة البيانات
-        
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        site_url = "https://web6112x.faselhdx.bid/recent_series"
+        res = requests.get(site_url, headers=headers, timeout=15)
+        soup = BeautifulSoup(res.text, 'html.parser')
 
-        for site in SITES:
-            try:
-                print(f"DEBUG: جاري فحص {site['url']}")
-                res = requests.get(site["url"], headers=headers, timeout=15)
-                soup = BeautifulSoup(res.text, 'html.parser')
-                
-                # استخدام طريقة بحث أعم: البحث عن أي رابط يحتوي على "post"
-                items = soup.find_all('a', href=True)
-                print(f"DEBUG: تم العثور على {len(items)} رابط في الصفحة.")
-                
-                for item in items[:5]: # لنفحص أول 5 روابط فقط للتجربة
-                    print(f"DEBUG: فحص الرابط: {item.text.strip()}")
-                    # ... (بقية منطق الإرسال)
-            except Exception as e:
-                print(f"DEBUG: خطأ داخل حلقة الموقع {site['url']}: {e}")
-                
-        cur.close(); conn.close()
+        # طباعة كل العناوين الموجودة في الصفحة لاختيار الكلاس الصحيح
+        print("DEBUG: --- جاري كشف هيكل الموقع ---")
+        for h in soup.find_all(['h2', 'h3', 'a']):
+            if len(h.text.strip()) > 5:
+                print(f"DEBUG: وجدت عنوان: {h.text.strip()}")
+        
+        # طباعة كل الصور
+        for img in soup.find_all('img'):
+            print(f"DEBUG: وجدت صورة: {img.get('src')}")
+            
     except Exception as e:
-        print(f"DEBUG: خطأ في الدالة الرئيسية: {e}")
+        print(f"DEBUG: خطأ: {e}")
 
 def loop():
     while True:
