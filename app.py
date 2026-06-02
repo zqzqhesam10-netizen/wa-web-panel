@@ -50,41 +50,48 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     url = "https://wecima.bar/category/مسلسلات-مدبلجة/"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/146.0.0.0"}
     
     try:
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # بدلاً من select المعقد، نستخدم find_all مثل كودك الناجح
-        # سنبحث عن الرابط الذي يحتوي على كلمة مدبلج
         for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
             
             if title and "مدبلج" in title and any(char.isdigit() for char in title):
-                # البحث عن الصورة بنفس منطق كودك الناجح
+                # البحث عن الصورة
                 img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
                 img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                 
                 if img_url:
-                    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-                    # التحقق من عدم التكرار (مهم جداً)
+                    conn = db()
+                    cur = conn.cursor(cursor_factory=RealDictCursor)
+                    
+                    # التحقق من عدم التكرار
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
+                    exists = cur.fetchone()
+                    
+                    if not exists:
+                        # جلب المستخدمين
                         cur.execute("SELECT phone FROM users LIMIT 50")
                         users = cur.fetchall()
                         
                         msg = f"🎬 {title}\n🔥 متاح الآن للمشاهدة!"
+                        
+                        # الإرسال
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
+                        # تسجيل العملية
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
                         cur.close(); conn.close()
-                        break # نكتفي بأول نتيجة (الحلقة الأحدث) ونخرج
+                        break # إيقاف الفحص بعد العثور على الحلقة الأحدث
+                    
                     cur.close(); conn.close()
-                break # وجدنا الحلقة المدبلجة الأحدث، نكتفي بها
+                break # إيقاف البحث بعد العثور على العنوان الصحيح
                 
     except Exception as e:
         print(f"Error in check_updates: {e}")
