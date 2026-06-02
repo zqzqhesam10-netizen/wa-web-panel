@@ -54,7 +54,7 @@ import time
 def check_updates():
     try:
         scraper = cloudscraper.create_scraper(delay=10) # إضافة تأخير 10 ثوانٍ للتحقق
-        url = "https://w1.anime4up.rest/episode/"
+        url = "https://w1.anime4up.rest/feed/"
         
         print("DEBUG: جاري محاولة الدخول وتجاوز الحماية...")
         res = scraper.get(url, timeout=30)
