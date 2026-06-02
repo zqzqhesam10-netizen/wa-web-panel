@@ -48,27 +48,28 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-def check_anime4up_structure():
+def check_updates():
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
         url = "https://w1.anime4up.rest/episode/"
-        print(f"DEBUG: جاري فحص هيكل: {url}")
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # كشف العناوين والروابط
-        print("DEBUG: --- جاري فحص العناوين ---")
-        for h in soup.find_all(['h2', 'h3', 'a']):
-            if len(h.text.strip()) > 5:
-                print(f"DEBUG: وجدت نص/عنوان: {h.text.strip()}")
+        print(f"DEBUG: --- فحص موقع Anime4up ---")
+        # فحص العناوين (غالباً تكون داخل class اسمه 'episodes-card-title' أو ما يشابهه)
+        for element in soup.find_all(['h2', 'h3', 'a']):
+            text = element.text.strip()
+            if len(text) > 5:
+                print(f"DEBUG: وجدت عنوان: {text}")
         
-        # كشف الصور
-        print("DEBUG: --- جاري فحص الصور ---")
+        # فحص الصور
         for img in soup.find_all('img'):
-            print(f"DEBUG: وجدت صورة: {img.get('src') or img.get('data-src')}")
-            
+            src = img.get('src') or img.get('data-src')
+            if src:
+                print(f"DEBUG: وجدت صورة: {src}")
+                
     except Exception as e:
-        print(f"DEBUG: خطأ في فحص الموقع: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
 
 def loop():
     while True:
