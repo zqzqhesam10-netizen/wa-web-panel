@@ -48,44 +48,49 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-def check_asd_turkish():
-    url = "https://m.asd.ink/category/turkish-series-2/"
+def check_updates():
+    # قائمة المواقع التي سيتم فحصها
+    # ملاحظة: تم ضبط كل موقع ليعمل بـ Thread مستقل لمنع الانهيار
+    sites = [
+        {"url": "https://web6112x.faselhdx.bid/recent_series", "name": "fasel", "keyword": "مسلسل"},
+        {"url": "https://wecima.bar/category/مسلسلات-مدبلجة/", "name": "wecima", "keyword": "مدبلج"},
+        {"url": "https://m.asd.ink/category/turkish-series-2/", "name": "asd_turkish", "keyword": "مسلسل"}
+    ]
+    
+    for site in sites:
+        threading.Thread(target=process_single_site, args=(site,)).start()
+
+def process_single_site(site):
+    """دالة لمعالجة موقع واحد في خلفية منفصلة"""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
     
     try:
+        # جلب المستخدمين
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users LIMIT 5")
         users = cur.fetchall()
         cur.close(); conn.close()
         
-        res = requests.get(url, headers=headers, timeout=15)
+        res = requests.get(site["url"], headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # في هذا الموقع، العناوين غالباً ما تكون داخل div باسم class معين
-        # سنبحث عن الروابط التي تحتوي على صور (بناءً على الصورة)
-        for item in soup.find_all('div', class_='col-6'): # هذا الكلاس الشائع لعرض البطاقات في النسخة المحمولة
-            link = item.find('a', href=True)
-            if not link: continue
+        
+        # البحث عن العناصر (متوافق مع الهيكل العام للمواقع)
+        for link in soup.find_all('a', href=True):
+            title = (link.get('title') or link.text).strip().split('\n')[0].strip()
             
-            # استخراج العنوان من النص الذي يظهر تحت الصورة
-            title_text = item.get_text(strip=True)
-            # تنظيف العنوان ليكون اسم المسلسل ورقم الحلقة فقط
-            title = title_text.split('\n')[0].strip()
-            
-            img_tag = item.find('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-            
-            if img_url and title:
-                print(f"DEBUG: تم العثور على: {title}")
-                msg = f"🇹🇷 {title}\n🔥 متاح الآن!"
+            if title and site['keyword'] in title:
+                img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
+                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                 
-                for u in users:
-                    send_image_message(u['phone'], img_url, msg)
-                    time.sleep(0.3)
-                break # نكتفي بأول مسلسل في الصفحة
-                
+                if img_url:
+                    print(f"DEBUG: تم العثور على محتوى من {site['name']}: {title}")
+                    msg = f"📺 {title}\n🔥 متاح الآن!"
+                    for u in users:
+                        send_image_message(u['phone'], img_url, msg)
+                        time.sleep(0.3)
+                    break # نكتفي بأول نتيجة لكل موقع
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in {site['name']}: {e}")
 
 def loop():
     while True:
