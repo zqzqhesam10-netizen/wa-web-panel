@@ -51,14 +51,44 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        print("DEBUG: جاري تشغيل المتصفح...")
-        with sync_playwright() as p:
-            # إجبار الكود على البحث عن المتصفح في المسار الذي حددناه في build.sh
-            browser = p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"]
-            )
-            # ... باقي الكود ...
+        print("DEBUG: جاري محاولة سحب البيانات عبر cloudscraper...")
+        
+        # إنشاء كائن scraper لتجاوز الحماية
+        scraper = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            }
+        )
+        
+        # الرابط المطلوب
+        target_url = "https://w1.anime4up.rest/episode/"
+        
+        # تنفيذ الطلب
+        response = scraper.get(target_url, timeout=30)
+        
+        if response.status_code == 200:
+            print("DEBUG: تم الاتصال بالموقع بنجاح!")
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # البحث عن الروابط
+            links = soup.find_all('a', href=True)
+            found_count = 0
+            
+            for link in links:
+                if '/episode/' in link['href']:
+                    found_count += 1
+                    print(f"DEBUG: تم العثور على حلقة: {link.get_text(strip=True)}")
+                    # هنا يمكنك إضافة كود الإرسال للواتساب إذا أردت
+            
+            if found_count == 0:
+                print("DEBUG: تم الوصول للموقع ولكن لم أجد روابط حلقات.")
+        else:
+            print(f"DEBUG: فشل الاتصال بالموقع، كود الحالة: {response.status_code}")
+            
+    except Exception as e:
+        print(f"DEBUG: حدث خطأ أثناء السحب: {str(e)}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
