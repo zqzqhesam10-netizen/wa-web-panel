@@ -57,33 +57,29 @@ def check_updates():
         soup = BeautifulSoup(res.content, 'html.parser')
         cards = soup.select('div.GridItem')
         
-        for card in cards[:10]:
+        # فحص أول 5 حلقات كما يراها البوت الآن
+        for card in cards[:5]:
             title = card.get_text(separator=' ', strip=True)
-            print(f"DEBUG: نص العنوان الملتقط هو: '{title}'")
             img_tag = card.find('img')
             img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
             
+            # شرط الإرسال المباشر (مدبلج + رقم حلقة)
             if "مدبلج" in title and any(char.isdigit() for char in title):
-                conn = db()
-                cur = conn.cursor(cursor_factory=RealDictCursor)
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title[:100],))
+                print(f"DEBUG: إرسال مباشر للحلقة: {title}")
+                msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
                 
-                if not cur.fetchone():
-                    print(f"DEBUG: تم اكتشاف حلقة مدبلجة: {title}")
-                    msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
-                    
-                    cur.execute("SELECT phone FROM users")
-                    users = cur.fetchall()
-                    for u in users:
-                        send_image_message(u['phone'], img_url, msg)
-                    
-                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                (title[:100], datetime.now().strftime("%H:%M")))
-                    conn.commit()
-                cur.close()
-                conn.close()
+                # جلب المستخدمين والإرسال مباشرة بدون فحص قاعدة البيانات
+                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("SELECT phone FROM users")
+                users = cur.fetchall()
+                
+                for u in users:
+                    send_image_message(u['phone'], img_url, msg)
+                
+                cur.close(); conn.close()
+                
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ أثناء الفحص: {e}")
         
 def loop():
     while True:
