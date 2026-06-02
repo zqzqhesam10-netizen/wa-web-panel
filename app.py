@@ -50,42 +50,34 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=15)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+            "Referer": "https://m.asd.ink/"
+        }
+        # جربنا النسخة المحمولة برأس (Header) خاص بالآيفون لخداع السيرفر
+        res = requests.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # البحث عن جميع العناصر التي قد تحتوي على مسلسل
-        # المواقع عادة تضع المسلسلات في روابط داخل مربعات
-        items = soup.find_all('a') 
-        print(f"DEBUG: البوت وجد {len(items)} رابط في الصفحة")
+        # جربنا البحث عن كلاسات مختلفة تماماً قد يستخدمها الموقع للنسخة المحمولة
+        # نبحث عن div يحتوي على "movie" أو "poster"
+        items = soup.find_all('div', class_=lambda x: x and ('movie' in x or 'poster' in x or 'item' in x))
+        
+        print(f"DEBUG: البوت وجد {len(items)} عنصر مرشح")
 
-        for link in items:
-            # فلتر: العنوان يجب أن يكون طويلاً بما يكفي ليكون اسم مسلسل
-            title = (link.get('title') or link.text).strip()
+        for item in items:
+            # البحث عن العنوان داخل أي tag
+            title_tag = item.find(['h2', 'h3', 'a'])
+            if not title_tag: continue
             
-            # محاولة العثور على صورة داخل الرابط أو بعده مباشرة
-            img_tag = link.find('img') or link.find_next('img')
+            title = title_tag.get_text(strip=True)
+            img_tag = item.find('img')
             img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
             
-            # نتحقق إذا كان الرابط فعلاً يحتوي على صورة لمسلسل
-            if len(title) > 10 and img_url:
-                print(f"DEBUG: وجدنا: {title}")
-                
-                msg = f"🇹🇷 {title}\n🔥 متاح الآن!"
-                for u in users:
-                    send_image_message(u['phone'], img_url, msg)
-                
-                # تسجيل العملية
-                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                            (title, datetime.now().strftime("%H:%M")))
-                conn.commit()
-                break # نكتفي بأول مسلسل حقيقي وجدناه
+            if title and img_url:
+                print(f"DEBUG: تم العثور على: {title}")
+                # هنا يمكنك إضافة كود الإرسال
+                break
         
-        cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
 
