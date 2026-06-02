@@ -33,28 +33,43 @@ def send_message(phone, message):
                       headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
                       json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
     except: pass
-
+        
 def check_updates():
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        conn = db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
+        print(f"DEBUG: تم العثور على {len(users)} مستخدم في قاعدة البيانات") # هذا سيظهر في الـ Logs
+        
         for site in SITES:
             try:
+                print(f"DEBUG: جاري فحص الموقع: {site['url']}")
                 res = requests.get(site["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
                 soup = BeautifulSoup(res.text, 'html.parser')
                 item = soup.select_one(site["sel"])
+                
                 if item:
-                    title, link = item.text.strip(), item.get('href', '')
-                    cur.execute("SELECT id FROM messages WHERE message LIKE %s LIMIT 1", (f"%{title}%",))
-                    if not cur.fetchone():
-                        msg = f"🆕 تحديث جديد:\n{title}\n🔗 {link}"
-                        for u in users: send_message(u['phone'], msg)
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-            except: continue
-        cur.close(); conn.close()
-    except: pass
+                    title = item.text.strip()
+                    link = item.get('href', '')
+                    print(f"DEBUG: تم العثور على خبر: {title}")
+                    
+                    # --- تعديل تجريبي: إرسال مباشر للجميع بدون تحقق ---
+                    msg = f"🆕 تحديث تجريبي:\n{title}\n🔗 {link}"
+                    for u in users:
+                        print(f"DEBUG: جاري الإرسال إلى {u['phone']}")
+                        send_message(u['phone'], msg)
+                    print("DEBUG: تم الانتهاء من الإرسال للجميع")
+                    # ----------------------------------------------
+                else:
+                    print(f"DEBUG: لم يتم العثور على أي تحديث في {site['url']}")
+            except Exception as e:
+                print(f"DEBUG: خطأ أثناء فحص الموقع {site['url']}: {e}")
+                continue
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"DEBUG: خطأ عام في دالة الفحص: {e}")
 
 def loop():
     while True:
