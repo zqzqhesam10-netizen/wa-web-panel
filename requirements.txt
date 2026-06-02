@@ -7,4 +7,3 @@ eventlet
 psycopg2-binary
 cloudscraper
 apscheduler
-playwright
