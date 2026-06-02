@@ -51,24 +51,14 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        print("DEBUG: جاري تشغيل المتصفح باستخدام Playwright...")
+        print("DEBUG: جاري تشغيل المتصفح...")
         with sync_playwright() as p:
-            # هنا لن نضع مساراً يدوياً، وسنتركه يجد المتصفح تلقائياً بعد تثبيته عبر build.sh
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            
-            # نحدد User-Agent ليظهر كمتصفح حقيقي
-            page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"})
-            
-            page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
-            page.wait_for_timeout(10000)
-            
-            soup = BeautifulSoup(page.content(), 'html.parser')
-            browser.close()
-            
-            # ... (بقية كود الفحص) ...
-    except Exception as e:
-        print(f"DEBUG: خطأ في Playwright: {e}")
+            # إجبار الكود على البحث عن المتصفح في المسار الذي حددناه في build.sh
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"]
+            )
+            # ... باقي الكود ...
 
 @app.route("/")
 def home(): return render_template("chat.html")
