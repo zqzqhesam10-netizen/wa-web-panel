@@ -185,7 +185,39 @@
             .then(() => { document.getElementById('messageInput').value = ''; fetchMessages(); });
         }
 
-        function openNewChatModal() { document.getElementById('newChatModal').style.display = 'flex'; }
+        // إضافة رقم جديد
+function createNewChat() {
+    const phone = document.getElementById('newPhoneInput').value;
+    const formData = new FormData();
+    formData.append('phone', phone);
+    
+    fetch('/api/add_user', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+        if(data.status === 'ok') {
+            alert("تمت الإضافة!");
+            closeNewChatModal();
+            location.reload(); // تحديث القائمة
+        }
+    });
+}
+
+// الإرسال الجماعي (البث)
+function sendBroadcast() {
+    const msg = document.getElementById('broadcastMessageInput').value;
+    // جلب كل الأرقام من القائمة
+    const phones = rawUsersList.map(u => u.phone);
+    
+    phones.forEach(phone => {
+        const formData = new FormData();
+        formData.append('phone', phone);
+        formData.append('message', msg);
+        fetch('/send', { method: 'POST', body: formData });
+    });
+    
+    alert("جاري الإرسال للجميع...");
+    closeBroadcastModal();
+}
         function closeNewChatModal() { document.getElementById('newChatModal').style.display = 'none'; }
         function openBroadcastModal() { document.getElementById('broadcastModal').style.display = 'flex'; }
         function closeBroadcastModal() { document.getElementById('broadcastModal').style.display = 'none'; }
