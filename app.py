@@ -49,46 +49,64 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 def check_updates():
+    # قائمة المواقع والأقسام مع الكلمات المفتاحية المناسبة
+    sites = [
+        {"url": "https://www.fasel-hd.cam/all-movies", "keyword": "فيلم"},
+        {"url": "https://www.fasel-hd.cam/recent_tvshows", "keyword": "برنامج"},
+        {"url": "https://www.fasel-hd.cam/episodes", "keyword": "مسلسل"},
+        {"url": "https://www.fasel-hd.cam/recent_anime", "keyword": "انمي"}
+    ]
+    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+    
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
-
-        # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
-        # هذه الطريقة هي الأكثر ثباتاً لأنها لا تعتمد على الـ div أو الكلاسات
-        for link in soup.find_all('a', href=True):
-            title = link.get('title') or link.text.strip()
-            
-            # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
-            if title and "مسلسل" in title and any(char.isdigit() for char in title):
-                # محاولة العثور على صورة مرتبطة بهذا الرابط
-                img_tag = link.find('img')
-                if not img_tag:
-                    # إذا لم تكن الصورة داخل الرابط، نبحث في العناصر المجاورة
-                    img_tag = link.find_previous('img') or link.find_next('img')
+        for site in sites:
+            try:
+                res = requests.get(site['url'], headers=headers, timeout=20)
+                soup = BeautifulSoup(res.text, 'html.parser')
                 
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-                
-                if img_url and not img_url.endswith('.gif'):
-                    # التحقق من عدم التكرار
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"DEBUG: تم العثور على مسلسل ثابت: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
+                # البحث داخل بطاقات العرض (وهي الهيكل الشائع في FaselHD)
+                for card in soup.select('div.post-item, div.card, div.col-md-3'):
+                    link = card.find('a', href=True)
+                    if not link: continue
+                    
+                    title = link.get('title') or link.text.strip()
+                    
+                    # منطق الفلترة:
+                    # 1. العنوان يحتوي الكلمة المفتاحية (حسب الموقع) أو إحدى كلماتك المفتاحية العامة
+                    # 2. يحتوي على رقم (دليل أنه حلقة أو فيلم فعلي)
+                    # 3. لا يحتوي على كلمات عامة مثل "جميع" أو "قائمة"
+                    keywords = ["انمي", "مسلسل", "الحلقة", "حلقة", "فيلم", "برنامج"]
+                    is_valid = any(k in title for k in keywords) and any(char.isdigit() for char in title)
+                    is_not_general = "جميع" not in title and "قائمة" not in title
+                    
+                    if title and len(title) > 5 and is_valid and is_not_general:
+                        img_tag = card.find('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                         
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        break 
+                        if img_url and not img_url.endswith('.gif'):
+                            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                            if not cur.fetchone():
+                                print(f"DEBUG: محتوى جديد تم اكتشافه: {title}")
+                                msg = f"🆕 {title}\n🔥 متاح الآن للمشاهدة!"
+                                for u in users:
+                                    send_image_message(u['phone'], img_url, msg)
+                                
+                                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                            (title, datetime.now().strftime("%H:%M")))
+                                conn.commit()
+                                # نكتفي بعنصر واحد لكل قسم في كل فحص لتجنب الضغط
+                                break 
+            except Exception as e:
+                print(f"DEBUG: خطأ أثناء فحص {site['url']}: {e}")
+        
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ عام في دالة التحديث: {e}")
 
 def loop():
     while True:
