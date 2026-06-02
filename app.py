@@ -52,26 +52,24 @@ def send_image_message(phone, image_url, caption):
 import glob
 from playwright.sync_api import sync_playwright
 
+# تأكد أن دالة check_updates تبدو هكذا تماماً:
 def check_updates():
     try:
-        # ... (كود فتح المتصفح كما هو) ...
-        page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
-        page.wait_for_timeout(5000)
-        
-        soup = BeautifulSoup(page.content(), 'html.parser')
-        
-        # لنقم بطباعة جميع عناوين الـ div والـ class لنعرف الهيكل الجديد للموقع
-        print("DEBUG: فحص هيكل الروابط...")
-        links = soup.find_all('a')
-        for i, link in enumerate(links[:20]): # سنطبع أول 20 رابطاً فقط لنرى ما بداخلهم
-            print(f"DEBUG: رابط {i}: {link.get('href')} - نص: {link.get_text(strip=True)}")
-            
-        # ... (بقية الكود) ...
-        
+        # كود البداية
+        print("DEBUG: جاري الفحص...")
+        # ... باقي الكود ...
+    except Exception as e:
+        # هذه الكتلة ضرورية جداً لإغلاق الـ try
+        print(f"DEBUG: خطأ في الفحص: {e}")
+
+# تأكد أن دالة loop (إذا كنت تستخدمها) تبدو هكذا:
 def loop():
     while True:
-        check_updates()
-        time.sleep(60)
+        try:
+            check_updates()
+        except Exception as e:
+            print(f"DEBUG: خطأ في حلقة التكرار: {e}")
+        time.sleep(3600) # انتظار ساعة مثلاً
 
 @app.route("/")
 def home(): return render_template("chat.html")
