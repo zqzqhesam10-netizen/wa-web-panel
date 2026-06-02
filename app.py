@@ -3,6 +3,7 @@ import os, threading, time, requests, psycopg2
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
 from datetime import datetime
+from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
@@ -48,8 +49,6 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-  from playwright.sync_api import sync_playwright
-
 def check_updates():
     try:
         print("DEBUG: جاري تشغيل المتصفح باستخدام Playwright...")
