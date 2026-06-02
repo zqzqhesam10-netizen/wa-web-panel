@@ -59,6 +59,7 @@ def check_updates():
         
         for card in cards[:10]:
             title = card.get_text(separator=' ', strip=True)
+            print(f"DEBUG: نص العنوان الملتقط هو: '{title}'")
             img_tag = card.find('img')
             img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
             
