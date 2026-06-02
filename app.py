@@ -50,36 +50,23 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-            "Referer": "https://m.asd.ink/"
-        }
-        # جربنا النسخة المحمولة برأس (Header) خاص بالآيفون لخداع السيرفر
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
         res = requests.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=20)
+        
+        # طباعة جزء من الـ HTML لنرى ما الذي يراه السيرفر فعلياً
+        print(f"DEBUG: طول الصفحة المحملة: {len(res.text)}")
+        
+        # البحث عن أي روابط تنتهي بـ .html أو تحتوي على /series/
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # جربنا البحث عن كلاسات مختلفة تماماً قد يستخدمها الموقع للنسخة المحمولة
-        # نبحث عن div يحتوي على "movie" أو "poster"
-        items = soup.find_all('div', class_=lambda x: x and ('movie' in x or 'poster' in x or 'item' in x))
+        links = soup.select('a[href*="series"]') # البحث عن أي رابط يحتوي كلمة series
         
-        print(f"DEBUG: البوت وجد {len(items)} عنصر مرشح")
-
-        for item in items:
-            # البحث عن العنوان داخل أي tag
-            title_tag = item.find(['h2', 'h3', 'a'])
-            if not title_tag: continue
-            
-            title = title_tag.get_text(strip=True)
-            img_tag = item.find('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-            
-            if title and img_url:
-                print(f"DEBUG: تم العثور على: {title}")
-                # هنا يمكنك إضافة كود الإرسال
-                break
+        print(f"DEBUG: وجدنا {len(links)} رابط يحتوي على كلمة series")
         
+        for link in links[:5]: # طباعة أول 5 روابط لنعرف شكلها
+            print(f"DEBUG: الرابط: {link.get('href')} النص: {link.text.strip()}")
+            
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ: {e}")
 
 def loop():
     while True:
