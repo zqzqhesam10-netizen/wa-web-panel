@@ -48,31 +48,20 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
- def check_updates():
+def check_updates():
     try:
         print("DEBUG: 1- جاري البحث عن المتصفح...")
         found_paths = glob.glob("/opt/render/project/src/.playwright/**/chrome", recursive=True)
         if not found_paths: raise Exception("لم يتم العثور على المتصفح")
         
-        print(f"DEBUG: 2- المتصفح موجود في: {found_paths[0]}")
-        
-        print("DEBUG: 3- جاري تشغيل Playwright...")
         with sync_playwright() as p:
-            print("DEBUG: 4- جاري إطلاق المتصفح...")
             browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox", "--disable-setuid-sandbox"])
-            
-            print("DEBUG: 5- جاري فتح الصفحة...")
             page = browser.new_page()
-            
-            print("DEBUG: 6- جاري الانتقال للرابط...")
             page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
+            page.wait_for_timeout(5000)
             
-            print("DEBUG: 7- جاري قراءة المحتوى...")
-            content = page.content()
-            
-            print("DEBUG: 8- جاري الإغلاق...")
+            soup = BeautifulSoup(page.content(), 'html.parser')
             browser.close()
-            
             print("DEBUG: 9- تم الجلب بنجاح!")
             
     except Exception as e:
