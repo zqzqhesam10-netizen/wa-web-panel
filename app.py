@@ -48,43 +48,35 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-   def check_updates():
-    # هذا السطر يضمن تشغيل الفحص في الخلفية بالكامل
+ def check_updates():
     try:
-        print("DEBUG: بدء الفحص في الخلفية...")
-        browser_path = "/opt/render/project/src/.playwright/chromium-1223/chrome-linux64/chrome"
+        print("DEBUG: 1- جاري البحث عن المتصفح...")
+        found_paths = glob.glob("/opt/render/project/src/.playwright/**/chrome", recursive=True)
+        if not found_paths: raise Exception("لم يتم العثور على المتصفح")
         
+        print(f"DEBUG: 2- المتصفح موجود في: {found_paths[0]}")
+        
+        print("DEBUG: 3- جاري تشغيل Playwright...")
         with sync_playwright() as p:
-            print("DEBUG: جاري إطلاق المتصفح...")
-            browser = p.chromium.launch(headless=True, executable_path=browser_path, args=["--no-sandbox"])
+            print("DEBUG: 4- جاري إطلاق المتصفح...")
+            browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox", "--disable-setuid-sandbox"])
+            
+            print("DEBUG: 5- جاري فتح الصفحة...")
             page = browser.new_page()
             
-            print("DEBUG: جاري الانتقال للموقع...")
+            print("DEBUG: 6- جاري الانتقال للرابط...")
             page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
-            page.wait_for_timeout(5000)
             
-            soup = BeautifulSoup(page.content(), 'html.parser')
+            print("DEBUG: 7- جاري قراءة المحتوى...")
+            content = page.content()
+            
+            print("DEBUG: 8- جاري الإغلاق...")
             browser.close()
             
-            # استخراج البيانات
-            items = soup.select('div.anime-card a') 
-            if items:
-                latest_ep = items[0].get_text(strip=True)
-                latest_link = items[0]['href']
-                print(f"DEBUG: تم العثور على: {latest_ep}")
-                
-                # هنا يتم الإرسال
-                # ... (كود إرسال الواتساب) ...
-            else:
-                print("DEBUG: لم يتم العثور على حلقات.")
+            print("DEBUG: 9- تم الجلب بنجاح!")
+            
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
-
-@app.route("/api/force_check", methods=["POST"])
-def force_check():
-    # تشغيل الفحص في Thread منفصل لضمان استمرار السيرفر
-    threading.Thread(target=check_updates, daemon=True).start()
-    return jsonify({"status": "تم بدء الفحص في الخلفية"})
+        print(f"DEBUG: خطأ فادح: {e}")
 
 def loop():
     while True:
