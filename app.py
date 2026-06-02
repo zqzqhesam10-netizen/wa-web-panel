@@ -48,44 +48,44 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-import threading
-
-def process_site(site, users):
-    """دالة فرعية لمعالجة موقع واحد في خلفية منفصلة"""
+def check_asd_turkish():
+    url = "https://m.asd.ink/category/turkish-series-2/"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+    
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get(site["url"], headers=headers, timeout=15)
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users LIMIT 5")
+        users = cur.fetchall()
+        cur.close(); conn.close()
+        
+        res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        for link in soup.find_all('a', href=True):
-            title = (link.get('title') or link.text).strip().split('\n')[0].strip()
-            if title and site['keyword'] in title and any(char.isdigit() for char in title):
-                img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+        # في هذا الموقع، العناوين غالباً ما تكون داخل div باسم class معين
+        # سنبحث عن الروابط التي تحتوي على صور (بناءً على الصورة)
+        for item in soup.find_all('div', class_='col-6'): # هذا الكلاس الشائع لعرض البطاقات في النسخة المحمولة
+            link = item.find('a', href=True)
+            if not link: continue
+            
+            # استخراج العنوان من النص الذي يظهر تحت الصورة
+            title_text = item.get_text(strip=True)
+            # تنظيف العنوان ليكون اسم المسلسل ورقم الحلقة فقط
+            title = title_text.split('\n')[0].strip()
+            
+            img_tag = item.find('img')
+            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+            
+            if img_url and title:
+                print(f"DEBUG: تم العثور على: {title}")
+                msg = f"🇹🇷 {title}\n🔥 متاح الآن!"
                 
-                if img_url and not img_url.endswith('.gif'):
-                    msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                    for u in users:
-                        send_image_message(u['phone'], img_url, msg)
-                        time.sleep(0.3) # فاصل زمني بسيط جداً لتجنب الحظر
-                    break # نرسل أول نتيجة فقط ونخرج
+                for u in users:
+                    send_image_message(u['phone'], img_url, msg)
+                    time.sleep(0.3)
+                break # نكتفي بأول مسلسل في الصفحة
+                
     except Exception as e:
-        print(f"Error in {site['name']}: {e}")
-
-def check_updates():
-    sites = [
-        {"url": "https://web6112x.faselhdx.bid/recent_series", "name": "fasel", "keyword": "مسلسل"},
-        {"url": "https://wecima.bar/category/مسلسلات-مدبلجة/", "name": "wecima", "keyword": "مدبلج"}
-    ]
-    
-    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT phone FROM users")
-    users = cur.fetchall()
-    cur.close(); conn.close()
-    
-    # تشغيل كل موقع في "خيط" (Thread) مستقل تماماً
-    for site in sites:
-        threading.Thread(target=process_site, args=(site, users), daemon=True).start()
+        print(f"Error: {e}")
 
 def loop():
     while True:
