@@ -60,44 +60,33 @@ from playwright.sync_api import sync_playwright
 
 def check_tuktukhd():
     try:
-        # تأكد من أن هذا المسار هو المسار الصحيح للمتصفح على سيرفر Render
         browser_path = "/opt/render/project/src/.playwright/chromium-1223/chrome-linux64/chrome"
-        
-        print("DEBUG: جاري إطلاق المتصفح الحقيقي...")
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, executable_path=browser_path, args=["--no-sandbox", "--disable-setuid-sandbox"])
-            page = browser.new_page()
+            # إضافة User-Agent حقيقي جداً لتجاوز حماية Cloudflare
+            browser = p.chromium.launch(headless=True, executable_path=browser_path)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            )
+            page = context.new_page()
             
-            print("DEBUG: جاري الانتقال للموقع...")
-            page.goto("https://tuktukhd.com/recent/", timeout=60000)
+            print("DEBUG: الانتقال للموقع...")
+            page.goto("https://tuktukhd.com/recent/", wait_until="networkidle", timeout=60000)
             
-            # الانتظار قليلاً حتى يتم تحميل المحتوى الديناميكي
-            page.wait_for_timeout(5000) 
+            # البحث عن العناصر من خلال XPath الذي يستهدف العناوين مباشرة
+            # نقوم بطباعة كل العناوين الموجودة لنرى ماذا يرى البوت
+            elements = page.query_selector_all("h2, .post-title, .title")
+            print(f"DEBUG: تم العثور على {len(elements)} عنصر محتمل.")
             
-            # استخراج محتوى الصفحة بعد تحميل الجافاسكريبت
-            content = page.content()
-            soup = BeautifulSoup(content, 'html.parser')
-            browser.close()
-            
-            # الآن نبحث عن الروابط كما فعلنا سابقاً
-            items = soup.select('div.post-item a, div.card a, a.img-link')
-            
-            if not items:
-                items = soup.find_all('a', href=True)
-
-            for link in items:
-                title = link.get('title') or link.text.strip()
-                if title and len(title) > 10:
-                    item_url = link['href']
-                    print(f"DEBUG: تم العثور بنجاح على: {title}")
-                    # الإرسال للمستخدمين...
-                    # (يمكنك إضافة كود الإرسال هنا بنفس منطقك السابق)
+            for el in elements:
+                title = el.inner_text().strip()
+                if len(title) > 5:
+                    print(f"DEBUG: العنصر المكتشف: {title}")
+                    # هنا يمكنك إضافة كود الإرسال لاحقاً
                     return 
             
-            print("DEBUG: لم يجد أي روابط حتى مع المتصفح.")
-            
+            browser.close()
     except Exception as e:
-        print(f"DEBUG: خطأ فادح في Playwright: {e}")
+        print(f"DEBUG: خطأ في Playwright: {e}")
         
 def loop():
     while True:
