@@ -58,21 +58,24 @@ def check_updates():
         res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # البحث عن كل العناصر التي تحتوي على كلمة "مسلسل" في النص
         found = False
-        for item in soup.find_all(True): # فحص كل العناصر
+        # نبحث عن كل الروابط لأنها غالباً ما تحتوي على العناوين
+        for item in soup.find_all('a', title=True):
+            title = item.get('title', '').strip()
+            
+            # الشرط الصارم
             if "الموسم" in title and ("الحلقة" in title or "حلقة" in title):
-                title = item.string.strip()
-                # محاولة العثور على صورة في العناصر المحيطة
-                parent = item.find_parent()
-                img_tag = parent.find_next('img') if parent else None
+                
+                # البحث عن الصورة في نفس عنصر الرابط أو ما حوله
+                img_tag = item.find_next('img')
                 img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-
-                if title and img_url:
+                
+                if img_url and not img_url.endswith('.gif'):
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        print(f"DEBUG: تم العثور على تحديث: {title}")
+                        print(f"DEBUG: تم العثور على تحديث حقيقي: {title}")
                         msg = f"📺 {title}\n🔥 متاح الآن!"
+                        
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
@@ -81,8 +84,10 @@ def check_updates():
                         conn.commit()
                         found = True
                         break 
+        
         if not found:
-            print("DEBUG: لم يتم العثور على أي تحديثات تطابق كلمة 'مسلسل'")
+            print("DEBUG: لم يتم العثور على تحديثات جديدة تطابق الشروط.")
+            
         cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
