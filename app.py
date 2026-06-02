@@ -48,12 +48,6 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-  # تحديث قائمة المواقع
-SITES = [
-    {"url": "https://web6112x.faselhdx.bid/recent_series", "sel": ".post-title a"},
-    {"url": "https://tuktukhd.com/recent/", "sel": ".post-title a"} # إضافة الموقع الجديد
-]
-
 def check_updates():
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -62,32 +56,41 @@ def check_updates():
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
         
-        for site in SITES:
+        # المواقع مع السليكتور المحدث للأكثر دقة
+        # استخدام h3 a هو الأضمن في معظم مواقع الأفلام والمسلسلات الحالية
+        sites_to_check = [
+            {"url": "https://web6112x.faselhdx.bid/recent_series", "sel": ".post-title a"},
+            {"url": "https://tuktukhd.com/recent/", "sel": "h3 a"} 
+        ]
+
+        for site in sites_to_check:
             try:
                 res = requests.get(site["url"], headers=headers, timeout=15)
                 soup = BeautifulSoup(res.text, 'html.parser')
                 
-                # البحث عن الروابط بناءً على السليكتور المحدد في القائمة
-                for link in soup.select(site["sel"]):
+                # البحث عن أول عنصر فقط (الأحدث)
+                link = soup.select_one(site["sel"])
+                if link:
                     title = link.get('title') or link.text.strip()
                     
-                    if title and any(char.isdigit() for char in title):
-                        # محاولة جلب الصورة
-                        img_tag = link.find_previous('img') or link.find_next('img')
+                    # التحقق من أن العنوان ليس فارغاً
+                    if title:
+                        # جلب الصورة (تبحث عن الصورة القريبة من الرابط)
+                        img_tag = link.find_previous('img') or link.find_next('img') or link.find('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                         
-                        if img_url and not img_url.endswith('.gif'):
-                            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                            if not cur.fetchone():
-                                print(f"DEBUG: تم العثور على محتوى جديد: {title}")
-                                msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                                
-                                for u in users:
-                                    send_image_message(u['phone'], img_url, msg)
-                                
-                                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                            (title, datetime.now().strftime("%H:%M")))
-                                conn.commit()
+                        # التحقق من التكرار في قاعدة البيانات
+                        cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                        if not cur.fetchone():
+                            print(f"DEBUG: تم العثور على تحديث جديد في {site['url']}: {title}")
+                            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                            
+                            for u in users:
+                                send_image_message(u['phone'], img_url, msg)
+                            
+                            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                        (title, datetime.now().strftime("%H:%M")))
+                            conn.commit()
             except Exception as e:
                 print(f"DEBUG: خطأ في فحص الموقع {site['url']}: {e}")
                 
