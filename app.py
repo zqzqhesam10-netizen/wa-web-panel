@@ -1,13 +1,14 @@
 from flask import Flask, request, jsonify, render_template
-import os, threading, time, requests, psycopg2
+import os, threading, time, requests, psycopg2, glob
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
 from datetime import datetime
 import cloudscraper
+from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
-# ضع بياناتك الحقيقية هنا
+# الإعدادات
 ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
 PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
@@ -28,7 +29,6 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
-# دالة إرسال النص (للرسائل العادية)
 def send_message(phone, message):
     try:
         requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
@@ -36,7 +36,6 @@ def send_message(phone, message):
                       json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
     except: pass
 
-# دالة إرسال الصورة (جديدة)
 def send_image_message(phone, image_url, caption):
     try:
         requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
@@ -48,28 +47,32 @@ def send_image_message(phone, image_url, caption):
                           "image": {"link": image_url, "caption": caption}
                       })
     except: pass
-        
-import glob
-from playwright.sync_api import sync_playwright
 
-# تأكد أن دالة check_updates تبدو هكذا تماماً:
 def check_updates():
     try:
-        # كود البداية
         print("DEBUG: جاري الفحص...")
-        # ... باقي الكود ...
+        found_paths = glob.glob("/opt/render/project/src/.playwright/**/chrome", recursive=True)
+        if not found_paths: raise Exception("لم يتم العثور على المتصفح")
+        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox", "--disable-setuid-sandbox"])
+            for site in SITES:
+                page = browser.new_page()
+                page.goto(site['url'], timeout=60000)
+                soup = BeautifulSoup(page.content(), 'html.parser')
+                # منطق الاستخراج والإرسال هنا
+                page.close()
+            browser.close()
     except Exception as e:
-        # هذه الكتلة ضرورية جداً لإغلاق الـ try
         print(f"DEBUG: خطأ في الفحص: {e}")
 
-# تأكد أن دالة loop (إذا كنت تستخدمها) تبدو هكذا:
 def loop():
     while True:
         try:
             check_updates()
         except Exception as e:
             print(f"DEBUG: خطأ في حلقة التكرار: {e}")
-        time.sleep(3600) # انتظار ساعة مثلاً
+        time.sleep(3600)
 
 @app.route("/")
 def home(): return render_template("chat.html")
@@ -105,24 +108,18 @@ def send():
 def add_user():
     phone = request.form.get("phone")
     if phone:
-        # تأكد من أن دالة الاتصال بقاعدة البيانات لديك تسمى db()
-        conn = db() 
-        cur = conn.cursor()
+        conn = db(); cur = conn.cursor()
         cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
-        conn.commit()
-        cur.close()
-        conn.close()
+        conn.commit(); cur.close(); conn.close()
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
 @app.route("/api/force_check", methods=["POST"])
 def force_check():
-    # استدعاء دالة الفحص فوراً
-    check_updates()
-    return jsonify({"status": "تم الفحص والإرسال بنجاح"})
+    threading.Thread(target=check_updates).start()
+    return jsonify({"status": "تم بدء الفحص"})
 
 @app.route("/webhook", methods=["GET", "POST"])
-
 def webhook():
     if request.method == "GET": return request.args.get("hub.challenge") if request.args.get("hub.verify_token") == VERIFY_TOKEN else "error", 403
     try:
