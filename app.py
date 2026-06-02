@@ -48,6 +48,12 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
+  # تحديث قائمة المواقع
+SITES = [
+    {"url": "https://web6112x.faselhdx.bid/recent_series", "sel": ".post-title a"},
+    {"url": "https://tuktukhd.com/recent/", "sel": ".post-title a"} # إضافة الموقع الجديد
+]
+
 def check_updates():
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -55,40 +61,39 @@ def check_updates():
         users = cur.fetchall()
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
-
-        # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
-        # هذه الطريقة هي الأكثر ثباتاً لأنها لا تعتمد على الـ div أو الكلاسات
-        for link in soup.find_all('a', href=True):
-            title = link.get('title') or link.text.strip()
-            
-            # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
-            if title and "مسلسل" in title and any(char.isdigit() for char in title):
-                # محاولة العثور على صورة مرتبطة بهذا الرابط
-                img_tag = link.find('img')
-                if not img_tag:
-                    # إذا لم تكن الصورة داخل الرابط، نبحث في العناصر المجاورة
-                    img_tag = link.find_previous('img') or link.find_next('img')
+        
+        for site in SITES:
+            try:
+                res = requests.get(site["url"], headers=headers, timeout=15)
+                soup = BeautifulSoup(res.text, 'html.parser')
                 
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-                
-                if img_url and not img_url.endswith('.gif'):
-                    # التحقق من عدم التكرار
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"DEBUG: تم العثور على مسلسل ثابت: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
+                # البحث عن الروابط بناءً على السليكتور المحدد في القائمة
+                for link in soup.select(site["sel"]):
+                    title = link.get('title') or link.text.strip()
+                    
+                    if title and any(char.isdigit() for char in title):
+                        # محاولة جلب الصورة
+                        img_tag = link.find_previous('img') or link.find_next('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                         
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        break 
+                        if img_url and not img_url.endswith('.gif'):
+                            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                            if not cur.fetchone():
+                                print(f"DEBUG: تم العثور على محتوى جديد: {title}")
+                                msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                                
+                                for u in users:
+                                    send_image_message(u['phone'], img_url, msg)
+                                
+                                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                            (title, datetime.now().strftime("%H:%M")))
+                                conn.commit()
+            except Exception as e:
+                print(f"DEBUG: خطأ في فحص الموقع {site['url']}: {e}")
+                
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ عام في الفحص: {e}")
 
 def loop():
     while True:
