@@ -61,7 +61,7 @@ def check_updates():
         # البحث عن كل العناصر التي تحتوي على كلمة "مسلسل" في النص
         found = False
         for item in soup.find_all(True): # فحص كل العناصر
-            if item.string and "مسلسل" in item.string:
+            if "الموسم" in title and ("الحلقة" in title or "حلقة" in title):
                 title = item.string.strip()
                 # محاولة العثور على صورة في العناصر المحيطة
                 parent = item.find_parent()
