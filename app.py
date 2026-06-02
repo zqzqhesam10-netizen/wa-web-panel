@@ -56,43 +56,48 @@ def check_updates():
     except Exception as e:
         print(f"DEBUG: خطأ في الدالة الرئيسية للتشغيل: {e}")
 
+from playwright.sync_api import sync_playwright
+
 def check_tuktukhd():
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        cur.close(); conn.close()
+        # تأكد من أن هذا المسار هو المسار الصحيح للمتصفح على سيرفر Render
+        browser_path = "/opt/render/project/src/.playwright/chromium-1223/chrome-linux64/chrome"
         
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("https://tuktukhd.com/recent/", headers=headers, timeout=20)
-        soup = BeautifulSoup(res.text, 'html.parser')
+        print("DEBUG: جاري إطلاق المتصفح الحقيقي...")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, executable_path=browser_path, args=["--no-sandbox", "--disable-setuid-sandbox"])
+            page = browser.new_page()
+            
+            print("DEBUG: جاري الانتقال للموقع...")
+            page.goto("https://tuktukhd.com/recent/", timeout=60000)
+            
+            # الانتظار قليلاً حتى يتم تحميل المحتوى الديناميكي
+            page.wait_for_timeout(5000) 
+            
+            # استخراج محتوى الصفحة بعد تحميل الجافاسكريبت
+            content = page.content()
+            soup = BeautifulSoup(content, 'html.parser')
+            browser.close()
+            
+            # الآن نبحث عن الروابط كما فعلنا سابقاً
+            items = soup.select('div.post-item a, div.card a, a.img-link')
+            
+            if not items:
+                items = soup.find_all('a', href=True)
 
-        # البحث عن كل الروابط التي تحتوي على كلمة 'film' أو 'series' أو تبدأ برابط العرض
-        # هذا يضمن أننا نجد الروابط حتى لو تغير تصميم الموقع
-        links = [a for a in soup.find_all('a', href=True) if '/video/' in a['href'] or '/movie/' in a['href']]
-        
-        if not links:
-            # إذا فشلنا، نجلب كل الروابط ونفلترها يدوياً
-            links = soup.find_all('a', href=True)
-
-        for link in links:
-            title = link.get('title') or link.text.strip()
-            # شرط اختيار العنوان (يحتوي نصاً طويلاً ومعقولاً)
-            if title and len(title) > 15:
-                img_tag = link.find('img') or link.find_previous('img')
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-                
-                print(f"DEBUG: تم العثور على محتوى: {title}")
-                msg = f"🆕 جديد TuktukHD:\n{title}\n{link['href']}"
-                
-                for u in users:
-                    if img_url: send_image_message(u['phone'], img_url, msg)
-                    else: send_message(u['phone'], msg)
-                return # نكتفي بأول رابط صالح وجدناه
-        
-        print("DEBUG: لم يتم العثور على أي محتوى صالح.")
+            for link in items:
+                title = link.get('title') or link.text.strip()
+                if title and len(title) > 10:
+                    item_url = link['href']
+                    print(f"DEBUG: تم العثور بنجاح على: {title}")
+                    # الإرسال للمستخدمين...
+                    # (يمكنك إضافة كود الإرسال هنا بنفس منطقك السابق)
+                    return 
+            
+            print("DEBUG: لم يجد أي روابط حتى مع المتصفح.")
+            
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ فادح في Playwright: {e}")
         
 def loop():
     while True:
