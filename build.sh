@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -o errexit
 
-# 1. تثبيت المكتبات (بدون sudo)
+# تثبيت المكتبات
 pip install -r requirements.txt
 
-# 2. تحميل المتصفح فقط (هذا لا يحتاج لصلاحيات root ويعمل في مجلد المستخدم)
+# إجبار Playwright على التثبيت في مسار ثابت يمكننا الوصول إليه
+export PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright
 playwright install chromium
