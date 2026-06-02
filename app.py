@@ -49,58 +49,47 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 def check_updates():
-    sites = [
-        {"url": "https://web6112x.faselhdx.bid/recent_series", "keyword": "مسلسل"},
-        {"url": "https://5tv.lol/new-episodes/", "keyword": "الحلقة"}
-    ]
-    
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-    
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        for site in sites:
-            try:
-                res = requests.get(site['url'], headers=headers, timeout=15)
-                soup = BeautifulSoup(res.text, 'html.parser')
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
+        soup = BeautifulSoup(res.text, 'html.parser')
+
+        # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
+        # هذه الطريقة هي الأكثر ثباتاً لأنها لا تعتمد على الـ div أو الكلاسات
+        for link in soup.find_all('a', href=True):
+            title = link.get('title') or link.text.strip()
+            
+            # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
+            if title and "مسلسل" in title and any(char.isdigit() for char in title):
+                # محاولة العثور على صورة مرتبطة بهذا الرابط
+                img_tag = link.find('img')
+                if not img_tag:
+                    # إذا لم تكن الصورة داخل الرابط، نبحث في العناصر المجاورة
+                    img_tag = link.find_previous('img') or link.find_next('img')
                 
-                # --- مرحلة التشخيص (الكشف) ---
-                all_links = soup.find_all('a', href=True)
-                print(f"DEBUG: فحص {site['url']} - البوت يرى {len(all_links)} رابط.")
-                for link in all_links[:3]: # طباعة أول 3 روابط
-                    print(f"DEBUG: رابط مكتشف: {link.text.strip()} | {link.get('href')}")
+                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                 
-                # --- مرحلة البحث عن المحتوى ---
-                cards = soup.select('div.card, article, .post-item')
-                for card in cards:
-                    link = card.find('a', href=True)
-                    if not link: continue
-                    title = link.get('title') or link.text.strip()
-                    
-                    if title and len(title) > 5 and site['keyword'] in title and "جميع" not in title:
-                        img_tag = card.find('img')
-                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                if img_url and not img_url.endswith('.gif'):
+                    # التحقق من عدم التكرار
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                    if not cur.fetchone():
+                        print(f"DEBUG: تم العثور على مسلسل ثابت: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        for u in users:
+                            send_image_message(u['phone'], img_url, msg)
                         
-                        if img_url:
-                            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                            if not cur.fetchone():
-                                print(f"DEBUG: تم العثور على: {title}")
-                                msg = f"✨ {title}\n🔥 متاح الآن!"
-                                for u in users:
-                                    send_image_message(u['phone'], img_url, msg)
-                                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                            (title, datetime.now().strftime("%H:%M")))
-                                conn.commit()
-                                break 
-            except Exception as e:
-                print(f"DEBUG: خطأ في موقع {site['url']}: {e}")
-                
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (title, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        break 
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ عام: {e}")
-        
+        print(f"DEBUG: خطأ في الفحص: {e}")
+
 def loop():
     while True:
         check_updates()
