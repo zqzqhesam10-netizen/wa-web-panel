@@ -47,7 +47,7 @@ def send_image_message(phone, image_url, caption):
                           "image": {"link": image_url, "caption": caption}
                       })
     except: pass
-
+        
 def check_updates():
     try:
         print("DEBUG: جاري الفحص...")
@@ -56,13 +56,39 @@ def check_updates():
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox", "--disable-setuid-sandbox"])
-            for site in SITES:
-                page = browser.new_page()
-                page.goto(site['url'], timeout=60000)
-                soup = BeautifulSoup(page.content(), 'html.parser')
-                # منطق الاستخراج والإرسال هنا
-                page.close()
+            
+            # الرابط الذي نريد فحصه الآن
+            target_url = "https://w1.anime4up.rest/episode/"
+            selector = ".eposhi a"
+            
+            print(f"DEBUG: جاري زيارة: {target_url}")
+            page = browser.new_page()
+            page.goto(target_url, timeout=60000)
+            page.wait_for_timeout(5000) # انتظار تحميل الموقع
+            
+            soup = BeautifulSoup(page.content(), 'html.parser')
+            items = soup.select(selector)
+            
+            if items:
+                latest_ep = items[0].get_text(strip=True)
+                latest_link = items[0]['href']
+                print(f"DEBUG: تم العثور على حلقة: {latest_ep} - الرابط: {latest_link}")
+                # هنا سيتم إرسال الرسالة لكل المستخدمين
+                # إرسال الرسالة لكل المستخدمين في قاعدة البيانات
+                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("SELECT phone FROM users")
+                users = cur.fetchall()
+                cur.close(); conn.close()
+                
+                msg = f"🔥 حلقة جديدة: {latest_ep}\nرابط: {latest_link}"
+                for user in users:
+                    send_message(user['phone'], msg)
+            else:
+                print("DEBUG: لم يتم العثور على أي حلقات باستخدام المحدد: {selector}")
+                
             browser.close()
+            print("DEBUG: انتهى الفحص.")
+            
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
 
