@@ -54,50 +54,19 @@ from playwright.sync_api import sync_playwright
 
 def check_updates():
     try:
-        print("DEBUG: جاري البحث عن المتصفح...")
-        with sync_playwright() as p:
-            search_path = "/opt/render/project/src/.playwright/**/chrome"
-            found_paths = glob.glob(search_path, recursive=True)
-            if not found_paths: raise Exception("لم يتم العثور على المتصفح!")
+        # ... (كود فتح المتصفح كما هو) ...
+        page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
+        page.wait_for_timeout(5000)
+        
+        soup = BeautifulSoup(page.content(), 'html.parser')
+        
+        # لنقم بطباعة جميع عناوين الـ div والـ class لنعرف الهيكل الجديد للموقع
+        print("DEBUG: فحص هيكل الروابط...")
+        links = soup.find_all('a')
+        for i, link in enumerate(links[:20]): # سنطبع أول 20 رابطاً فقط لنرى ما بداخلهم
+            print(f"DEBUG: رابط {i}: {link.get('href')} - نص: {link.get_text(strip=True)}")
             
-            browser = p.chromium.launch(
-                headless=True,
-                executable_path=found_paths[0],
-                args=["--no-sandbox", "--disable-setuid-sandbox"]
-            )
-            page = browser.new_page()
-            page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"})
-            
-            page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
-            page.wait_for_timeout(5000)
-            
-            soup = BeautifulSoup(page.content(), 'html.parser')
-            browser.close()
-            
-            # استخراج أحدث حلقة
-            items = soup.select(".eposhi a")
-            if items:
-                latest_ep = items[0].get_text(strip=True)
-                latest_link = items[0]['href']
-                
-                # إرسال الرسالة إلى جميع المستخدمين في قاعدة البيانات
-                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-                cur.execute("SELECT phone FROM users")
-                users = cur.fetchall()
-                cur.close(); conn.close()
-                
-                message_body = f"🔥 حلقة جديدة الآن!\n\n{latest_ep}\n\nالرابط:\n{latest_link}"
-                
-                for user in users:
-                    send_message(user['phone'], message_body)
-                    print(f"DEBUG: تم إرسال الرسالة إلى {user['phone']}")
-                
-                print(f"DEBUG: تم إرسال الحلقة: {latest_ep}")
-            else:
-                print("DEBUG: لم يتم العثور على حلقات.")
-            
-    except Exception as e:
-        print(f"DEBUG: خطأ: {str(e)}")
+        # ... (بقية الكود) ...
         
 def loop():
     while True:
