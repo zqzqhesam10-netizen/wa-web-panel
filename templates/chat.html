@@ -130,6 +130,13 @@
                 renderUsers(rawUsersList);
             });
         }
+        function forceCheck() {
+    alert("جاري فحص المواقع، يرجى الانتظار...");
+    fetch('/api/force_check', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => alert(data.status))
+    .catch(() => alert("حدث خطأ في الاتصال"));
+}
 
         function renderUsers(users) {
             const container = document.querySelector('.user-list');
