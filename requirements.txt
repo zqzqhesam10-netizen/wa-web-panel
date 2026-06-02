@@ -3,7 +3,5 @@ requests
 beautifulsoup4
 gunicorn
 flask-socketio
-eventlet
 psycopg2-binary
-cloudscraper
 apscheduler
