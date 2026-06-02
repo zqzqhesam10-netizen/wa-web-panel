@@ -53,39 +53,30 @@ def check_updates():
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
     
     try:
-        res = requests.get(url, headers=headers, timeout=20)
+        res = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(res.content, 'html.parser')
-        
-        # استهداف الحاويات
         cards = soup.select('div.GridItem')
         
-        if not cards: 
-            return
-
-        # التركيز فقط على العنصر الأول (آخر حلقة)
-        latest_card = cards[0]
-        title = latest_card.get_text(separator=' ', strip=True)
-        img_tag = latest_card.find('img')
-        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+        if not cards: return
         
-        # شرط الفلترة للحلقة الأخيرة فقط
-        if "مدبلج" in title and any(char.isdigit() for char in title):
-            print(f"DEBUG: تم التقاط الحلقة الأخيرة فقط: {title}")
-            
-            conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        # الحلقة الأخيرة فقط (بدون أي فحص إضافي)
+        latest = cards[0]
+        title = latest.get_text(separator=' ', strip=True)
+        img_url = latest.find('img').get('data-src') or latest.find('img').get('src')
+        
+        if "مدبلج" in title:
+            conn = db()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT phone FROM users")
             users = cur.fetchall()
             cur.close(); conn.close()
             
-            msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
-            
-            # إرسال للحلقة الواحدة فقط
+            # إرسال فوري بدون أي انتظار
             for u in users:
-                send_image_message(u['phone'], img_url, msg)
-                time.sleep(0.5) # فاصل زمني بسيط جداً للاستقرار
+                send_image_message(u['phone'], img_url, f"🎬 {title}\n🔥 متاح الآن!")
                 
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"Error: {e}")
         
 def loop():
     while True:
