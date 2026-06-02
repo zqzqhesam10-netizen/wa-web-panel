@@ -60,33 +60,35 @@ from playwright.sync_api import sync_playwright
 
 def check_tuktukhd():
     try:
-        browser_path = "/opt/render/project/src/.playwright/chromium-1223/chrome-linux64/chrome"
-        with sync_playwright() as p:
-            # إضافة User-Agent حقيقي جداً لتجاوز حماية Cloudflare
-            browser = p.chromium.launch(headless=True, executable_path=browser_path)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            )
-            page = context.new_page()
+        # تغيير الرابط لنسخة الموبايل (عادة تكون أخف)
+        url = "https://m.tuktukhd.com/recent/"
+        # تحديث الـ Headers لتكون أكثر دقة
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Referer": "https://m.tuktukhd.com/"
+        }
+        
+        res = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        # البحث عن العناصر الشائعة في النسخ الخفيفة
+        items = soup.find_all('a')
+        
+        for link in items:
+            href = link.get('href', '')
+            title = link.get('title') or link.text.strip()
             
-            print("DEBUG: الانتقال للموقع...")
-            page.goto("https://tuktukhd.com/recent/", wait_until="networkidle", timeout=60000)
-            
-            # البحث عن العناصر من خلال XPath الذي يستهدف العناوين مباشرة
-            # نقوم بطباعة كل العناوين الموجودة لنرى ماذا يرى البوت
-            elements = page.query_selector_all("h2, .post-title, .title")
-            print(f"DEBUG: تم العثور على {len(elements)} عنصر محتمل.")
-            
-            for el in elements:
-                title = el.inner_text().strip()
-                if len(title) > 5:
-                    print(f"DEBUG: العنصر المكتشف: {title}")
-                    # هنا يمكنك إضافة كود الإرسال لاحقاً
-                    return 
-            
-            browser.close()
+            # فلترة ذكية: الرابط يحتوي على كلمة مسلسل أو فيلم والاسم طوله معقول
+            if len(title) > 10 and ('/video/' in href or '/movie/' in href):
+                print(f"DEBUG: تم العثور على محتوى خفيف: {title}")
+                # إرسال...
+                return
+                
+        print("DEBUG: لم يتم العثور على أي شيء حتى عبر نسخة الموبايل.")
     except Exception as e:
-        print(f"DEBUG: خطأ في Playwright: {e}")
+        print(f"DEBUG: خطأ خفيف: {e}")
         
 def loop():
     while True:
