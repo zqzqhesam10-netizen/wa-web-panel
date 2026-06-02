@@ -36,40 +36,55 @@ def send_message(phone, message):
         
 def check_updates():
     try:
-        conn = db()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
-        print(f"DEBUG: تم العثور على {len(users)} مستخدم في قاعدة البيانات") # هذا سيظهر في الـ Logs
         
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+            "Referer": "https://www.google.com/"
+        }
+
         for site in SITES:
             try:
-                print(f"DEBUG: جاري فحص الموقع: {site['url']}")
-                res = requests.get(site["url"], headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
-                soup = BeautifulSoup(res.text, 'html.parser')
-                item = soup.select_one(site["sel"])
+                res = requests.get(site["url"], headers=headers, timeout=15)
+                if res.status_code != 200:
+                    print(f"DEBUG: فشل الاتصال بـ {site['url']} (كود: {res.status_code})")
+                    continue
                 
-                if item:
-                    title = item.text.strip()
-                    link = item.get('href', '')
-                    print(f"DEBUG: تم العثور على خبر: {title}")
+                soup = BeautifulSoup(res.text, 'html.parser')
+                # البحث الذكي: نبحث عن أي رابط داخل الصفحة يحتوي على كلمات دالة
+                all_links = soup.find_all('a', href=True)
+                
+                found_item = None
+                for link in all_links:
+                    href = link['href']
+                    text = link.text.strip()
+                    # نبحث عن روابط تحتوي على كلمات تدل على الحلقات أو الأفلام
+                    if any(keyword in href.lower() or keyword in text.lower() for keyword in ['ep', 'episode', 'series', 'movie']):
+                        if len(text) > 5: # تجاهل الروابط القصيرة جداً
+                            found_item = {"title": text, "link": href if href.startswith('http') else site["url"] + href}
+                            break
+                
+                if found_item:
+                    title, link = found_item["title"], found_item["link"]
+                    print(f"DEBUG: تم العثور على خبر ذكي: {title}")
                     
-                    # --- تعديل تجريبي: إرسال مباشر للجميع بدون تحقق ---
-                    msg = f"🆕 تحديث تجريبي:\n{title}\n🔗 {link}"
+                    # إرسال تجريبي للجميع (كما اتفقنا للتأكد)
+                    msg = f"🆕 تحديث جديد:\n{title}\n🔗 {link}"
                     for u in users:
-                        print(f"DEBUG: جاري الإرسال إلى {u['phone']}")
                         send_message(u['phone'], msg)
-                    print("DEBUG: تم الانتهاء من الإرسال للجميع")
-                    # ----------------------------------------------
+                    
+                    # سجل الخبر في القاعدة لتجنب التكرار لاحقاً
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", (title, datetime.now().strftime("%H:%M")))
+                    conn.commit()
                 else:
-                    print(f"DEBUG: لم يتم العثور على أي تحديث في {site['url']}")
+                    print(f"DEBUG: لم يجد النظام أي روابط في {site['url']}")
             except Exception as e:
-                print(f"DEBUG: خطأ أثناء فحص الموقع {site['url']}: {e}")
-                continue
-        cur.close()
-        conn.close()
+                print(f"DEBUG: خطأ في فحص الموقع {site['url']}: {e}")
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ عام في دالة الفحص: {e}")
+        print(f"DEBUG: خطأ عام: {e}")
 
 def loop():
     while True:
