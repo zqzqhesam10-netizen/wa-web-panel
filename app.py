@@ -58,43 +58,37 @@ def check_updates():
         
         for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
-            
             if title and "مدبلج" in title and any(char.isdigit() for char in title):
-                # البحث عن الصورة
                 img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
                 img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                 
                 if img_url:
-                    conn = db()
-                    cur = conn.cursor(cursor_factory=RealDictCursor)
-                    
-                    # التحقق من عدم التكرار
+                    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    exists = cur.fetchone()
-                    
-                    if not exists:
-                        # جلب المستخدمين
-                        cur.execute("SELECT phone FROM users LIMIT 50")
-                        users = cur.fetchall()
+                    if not cur.fetchone():
+                        # --- بدلاً من الإرسال المباشر البطيء ---
+                        # نقوم بتشغيل الإرسال في خيط (Thread) منفصل
+                        def fast_send():
+                            # نفتح اتصال جديد خاص بالإرسال
+                            c = db(); cr = c.cursor(cursor_factory=RealDictCursor)
+                            cr.execute("SELECT phone FROM users LIMIT 50")
+                            users = cr.fetchall()
+                            for u in users:
+                                send_image_message(u['phone'], img_url, f"🎬 {title}\n🔥 متاح الآن!")
+                                time.sleep(0.2) # راحة قصيرة جداً
+                            cr.close(); c.close()
                         
-                        msg = f"🎬 {title}\n🔥 متاح الآن للمشاهدة!"
+                        threading.Thread(target=fast_send).start()
                         
-                        # الإرسال
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        # تسجيل العملية
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
                         cur.close(); conn.close()
-                        break # إيقاف الفحص بعد العثور على الحلقة الأحدث
-                    
+                        break 
                     cur.close(); conn.close()
-                break # إيقاف البحث بعد العثور على العنوان الصحيح
-                
+                break 
     except Exception as e:
-        print(f"Error in check_updates: {e}")
+        print(f"Error: {e}")
 
 def loop():
     while True:
