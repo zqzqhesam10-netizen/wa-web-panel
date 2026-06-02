@@ -55,7 +55,7 @@ def check_updates():
         users = cur.fetchall()
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("{"url": "https://tuktukhd.com/recent/", "sel": "h3 a"}", headers=headers, timeout=15)
+        res = requests.get("https://tuktukhd.com/recent", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
         # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
