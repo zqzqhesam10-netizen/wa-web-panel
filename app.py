@@ -47,50 +47,35 @@ def send_image_message(phone, image_url, caption):
                           "image": {"link": image_url, "caption": caption}
                       })
     except: pass
-
+        
 def check_updates():
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
+        print(f"DEBUG: تم العثور على {len(users)} مستخدم.") # للتأكد من قاعدة البيانات
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
 
         for site in SITES:
             try:
+                print(f"DEBUG: جاري فحص {site['url']}")
                 res = requests.get(site["url"], headers=headers, timeout=15)
-                if res.status_code != 200: continue
-                
                 soup = BeautifulSoup(res.text, 'html.parser')
-                # البحث عن أول عنصر يحتوي على صورة ورابط وعنوان (حاوية)
-                # هذه الطريقة تبحث عن أي div أو article يحتوي على رابط وصورة
-                items = soup.find_all('div', class_=lambda x: x and ('post' in x or 'item' in x or 'episode' in x))
                 
-                for item in items:
-                    img_tag = item.find('img')
-                    link_tag = item.find('a', href=True)
-                    
-                    if img_tag and link_tag:
-                        title = link_tag.get('title') or link_tag.text.strip()
-                        img_url = img_tag.get('src')
-                        link = link_tag['href']
-                        link = link if link.startswith('http') else site["url"].rstrip('/') + '/' + link.lstrip('/')
-                        
-                        if len(title) > 5:
-                            msg = f"📺 {title}\n🔗 {link}"
-                            # إرسال الصورة مع النص كـ caption
-                            for u in users:
-                                send_image_message(u['phone'], img_url, msg)
-                            
-                            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                        (title, datetime.now().strftime("%H:%M")))
-                            conn.commit()
-                            break # إرسال أول تحديث فقط
+                # استخدام طريقة بحث أعم: البحث عن أي رابط يحتوي على "post"
+                items = soup.find_all('a', href=True)
+                print(f"DEBUG: تم العثور على {len(items)} رابط في الصفحة.")
+                
+                for item in items[:5]: # لنفحص أول 5 روابط فقط للتجربة
+                    print(f"DEBUG: فحص الرابط: {item.text.strip()}")
+                    # ... (بقية منطق الإرسال)
             except Exception as e:
-                print(f"DEBUG: خطأ في {site['url']}: {e}")
+                print(f"DEBUG: خطأ داخل حلقة الموقع {site['url']}: {e}")
+                
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ عام: {e}")
+        print(f"DEBUG: خطأ في الدالة الرئيسية: {e}")
 
 def loop():
     while True:
