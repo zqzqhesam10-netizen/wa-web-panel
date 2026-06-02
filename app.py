@@ -54,41 +54,45 @@ def check_updates():
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
-        soup = BeautifulSoup(res.text, 'html.parser')
-
-        # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
-        # هذه الطريقة هي الأكثر ثباتاً لأنها لا تعتمد على الـ div أو الكلاسات
-        for link in soup.find_all('a', href=True):
-            title = link.get('title') or link.text.strip()
-            
-            # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
-            if title and "مسلسل" in title and any(char.isdigit() for char in title):
-                # محاولة العثور على صورة مرتبطة بهذا الرابط
-                img_tag = link.find('img')
-                if not img_tag:
-                    # إذا لم تكن الصورة داخل الرابط، نبحث في العناصر المجاورة
-                    img_tag = link.find_previous('img') or link.find_next('img')
+        # المواقع المراد فحصها
+        sites = [
+            {"url": "https://web6112x.faselhdx.bid/recent_series", "sel": ".post-title a"},
+            {"url": "https://tuktukhd.com/recent/", "sel": "h3 a"}
+        ]
+        
+        for site in sites:
+            try:
+                # طلب سريع مع تحديد وقت انتظار (Timeout)
+                res = session.get(site["url"], timeout=10)
+                soup = BeautifulSoup(res.text, 'html.parser')
+                link = soup.select_one(site["sel"])
                 
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                if link:
+                    title = link.get('title') or link.text.strip()
+                    # التحقق من أن العنوان ليس فارغاً
+                    if title:
+                        cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                        if not cur.fetchone():
+                            # جلب الصورة
+                            img_tag = link.find_previous('img') or link.find_next('img') or link.find('img')
+                            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                            
+                            # إرسال للمستخدمين
+                            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                            for u in users:
+                                send_image_message(u['phone'], img_url, msg)
+                            
+                            # تسجيل في القاعدة
+                            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                        (title, datetime.now().strftime("%H:%M")))
+                            conn.commit()
+                            print(f"DEBUG: تم إرسال تحديث جديد: {title}")
+            except Exception as e:
+                print(f"DEBUG: خطأ في فحص {site['url']}: {e}")
                 
-                if img_url and not img_url.endswith('.gif'):
-                    # التحقق من عدم التكرار
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"DEBUG: تم العثور على مسلسل ثابت: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        break 
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ عام في الدالة: {e}")
 
 def loop():
     while True:
