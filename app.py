@@ -55,38 +55,30 @@ def check_updates():
         users = cur.fetchall()
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        # الرابط الجديد
         res = requests.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # البحث عن البطاقات التي تحتوي على المسلسلات (عادة تكون داخل كلاس col-6 في هذا الموقع)
-        for item in soup.find_all('div', class_='col-6'):
-            link = item.find('a', href=True)
-            if not link: continue
-            
-            # استخراج العنوان من نص البطاقة
+        # طباعة كل ما يجده البوت لنعرف أين المشكلة
+        items = soup.find_all('div', class_='col-6')
+        print(f"DEBUG: البوت وجد {len(items)} بطاقة في الموقع")
+
+        for item in items:
             title = item.get_text(strip=True).split('\n')[0].strip()
+            img_tag = item.find('img')
+            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "لا يوجد صورة"
             
-            # شرط البحث: نتحقق من وجود العنوان
-            if title:
-                # محاولة العثور على الصورة داخل البطاقة
-                img_tag = item.find('img')
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+            print(f"DEBUG: وجدنا: {title} | الصورة: {img_url}")
+
+            if title and img_url != "لا يوجد صورة":
+                msg = f"🇹🇷 {title}\n🔥 متاح الآن!"
+                for u in users:
+                    send_image_message(u['phone'], img_url, msg)
                 
-                if img_url and not img_url.endswith('.gif'):
-                    # التحقق من عدم التكرار في قاعدة البيانات
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"DEBUG: تم العثور على مسلسل تركي جديد: {title}")
-                        msg = f"🇹🇷 {title}\n🔥 متاح الآن للمشاهدة!"
-                        
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        break # نكتفي بأول مسلسل جديد يتم العثور عليه
+                # إضافة تسجيل بسيط بدون شرط التكرار
+                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                            (title, datetime.now().strftime("%H:%M")))
+                conn.commit()
+                # حذفنا الـ break لنرى هل يقرأ كل شيء
         
         cur.close(); conn.close()
     except Exception as e:
