@@ -49,34 +49,50 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 import cloudscraper
-import time
 
 def check_updates():
     try:
-        scraper = cloudscraper.create_scraper(delay=10) # إضافة تأخير 10 ثوانٍ للتحقق
-        url = "https://w1.anime4up.rest/feed/"
+        # بيانات البروكسي الأول من القائمة التي أرسلتها
+        proxy_ip = "38.154.203.95"
+        proxy_port = "5863"
+        proxy_user = "texqxavf"
+        proxy_pass = "fd5174zppvwi"
         
-        print("DEBUG: جاري محاولة الدخول وتجاوز الحماية...")
-        res = scraper.get(url, timeout=30)
+        # دمج البيانات في تنسيق صحيح
+        proxy_url = f"http://{proxy_user}:{proxy_pass}@{proxy_ip}:{proxy_port}"
+        
+        proxies = {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+
+        # استخدام cloudscraper مع البروكسي
+        scraper = cloudscraper.create_scraper()
+        
+        url = "https://w1.anime4up.rest/episode/"
+        print("DEBUG: جاري المحاولة باستخدام البروكسي الأول...")
+        
+        # إضافة البروكسي هنا
+        res = scraper.get(url, proxies=proxies, timeout=30)
         
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # لنرى العنوان الجديد الآن بعد التأخير
-        print(f"DEBUG: عنوان الصفحة الحالي: {soup.title.text if soup.title else 'لا يوجد عنوان'}")
-        
-        # فحص الروابط
+        # البحث عن الحلقات
         links = soup.find_all('a', href=True)
-        count = 0
+        found = False
         for link in links:
+            # الموقع يستخدم /episode/ للروابط
             if '/episode/' in link['href']:
-                print(f"DEBUG: وجدت رابط: {link.get_text(strip=True)}")
-                count += 1
+                title = link.get_text(strip=True)
+                if title:
+                    print(f"DEBUG: تم العثور على حلقة: {title}")
+                    found = True
         
-        if count == 0:
-            print("DEBUG: ما زالت الحماية تمنعنا أو الهيكل مختلف.")
+        if not found:
+            print(f"DEBUG: لم أجد حلقات. عنوان الصفحة: {soup.title.text if soup.title else 'لا يوجد'}")
             
     except Exception as e:
-        print(f"DEBUG: خطأ في تجاوز الحماية: {e}")
+        print(f"DEBUG: خطأ في استخدام البروكسي: {e}")
         
 def loop():
     while True:
