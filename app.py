@@ -55,41 +55,37 @@ def check_updates():
     try:
         res = requests.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(res.content, 'html.parser')
+        
+        # استهداف الحاويات
         cards = soup.select('div.GridItem')
         
-        # 1. الفحص فقط: نكتفي بجمع الحلقات الجديدة في قاعدة البيانات
-        for card in cards[:5]:
-            title = card.get_text(separator=' ', strip=True)
-            img_tag = card.find('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+        if not cards: 
+            return
+
+        # التركيز فقط على العنصر الأول (آخر حلقة)
+        latest_card = cards[0]
+        title = latest_card.get_text(separator=' ', strip=True)
+        img_tag = latest_card.find('img')
+        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+        
+        # شرط الفلترة للحلقة الأخيرة فقط
+        if "مدبلج" in title and any(char.isdigit() for char in title):
+            print(f"DEBUG: تم التقاط الحلقة الأخيرة فقط: {title}")
             
-            if "مدبلج" in title and any(char.isdigit() for char in title):
-                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-                
-                # تخزين الحلقة في جدول 'queue' (يجب أن يكون لديك هذا الجدول)
-                cur.execute("INSERT INTO queue (title, img_url) VALUES (%s, %s) ON CONFLICT DO NOTHING", (title, img_url))
-                conn.commit()
-                cur.close(); conn.close()
+            conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT phone FROM users")
+            users = cur.fetchall()
+            cur.close(); conn.close()
+            
+            msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
+            
+            # إرسال للحلقة الواحدة فقط
+            for u in users:
+                send_image_message(u['phone'], img_url, msg)
+                time.sleep(0.5) # فاصل زمني بسيط جداً للاستقرار
                 
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
-
-# 2. دالة إرسال منفصلة (استدعها بشكل دوري، لا تضعها داخل الفحص)
-def process_queue():
-    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM queue LIMIT 3")
-    items = cur.fetchall()
-    
-    for item in items:
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        for u in users:
-            send_image_message(u['phone'], item['img_url'], f"🎙️ جديد: {item['title']}")
-        
-        cur.execute("DELETE FROM queue WHERE id = %s", (item['id'],))
-    
-    conn.commit()
-    cur.close(); conn.close()
         
 def loop():
     while True:
