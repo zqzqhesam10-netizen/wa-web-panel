@@ -1,14 +1,12 @@
 from flask import Flask, request, jsonify, render_template
-import os, threading, time, requests, psycopg2, glob
+import os, threading, time, requests, psycopg2
 from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
 from datetime import datetime
-import cloudscraper
-from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
-# الإعدادات
+# ضع بياناتك الحقيقية هنا
 ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
 PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
@@ -29,6 +27,7 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
+# دالة إرسال النص (للرسائل العادية)
 def send_message(phone, message):
     try:
         requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
@@ -36,6 +35,7 @@ def send_message(phone, message):
                       json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
     except: pass
 
+# دالة إرسال الصورة (جديدة)
 def send_image_message(phone, image_url, caption):
     try:
         requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
@@ -50,30 +50,50 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        print("DEBUG: 1- جاري البحث عن المتصفح...")
-        found_paths = glob.glob("/opt/render/project/src/.playwright/**/chrome", recursive=True)
-        if not found_paths: raise Exception("لم يتم العثور على المتصفح")
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox", "--disable-setuid-sandbox"])
-            page = browser.new_page()
-            page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
-            page.wait_for_timeout(5000)
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        res = requests.get("https://web6112x.faselhdx.bid/recent_series", headers=headers, timeout=15)
+        soup = BeautifulSoup(res.text, 'html.parser')
+
+        # البحث عن أي رابط يحتوي على كلمة "مسلسل" في نصه أو الرابط الخاص به
+        # هذه الطريقة هي الأكثر ثباتاً لأنها لا تعتمد على الـ div أو الكلاسات
+        for link in soup.find_all('a', href=True):
+            title = link.get('title') or link.text.strip()
             
-            soup = BeautifulSoup(page.content(), 'html.parser')
-            browser.close()
-            print("DEBUG: 9- تم الجلب بنجاح!")
-            
+            # التحقق من أن الرابط هو فعلاً مسلسل (يحتوي كلمة مسلسل)
+            if title and "مسلسل" in title and any(char.isdigit() for char in title):
+                # محاولة العثور على صورة مرتبطة بهذا الرابط
+                img_tag = link.find('img')
+                if not img_tag:
+                    # إذا لم تكن الصورة داخل الرابط، نبحث في العناصر المجاورة
+                    img_tag = link.find_previous('img') or link.find_next('img')
+                
+                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                
+                if img_url and not img_url.endswith('.gif'):
+                    # التحقق من عدم التكرار
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                    if not cur.fetchone():
+                        print(f"DEBUG: تم العثور على مسلسل ثابت: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        for u in users:
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (title, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        break 
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ فادح: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
 
 def loop():
     while True:
-        try:
-            check_updates()
-        except Exception as e:
-            print(f"DEBUG: خطأ في حلقة التكرار: {e}")
-        time.sleep(3600)
+        check_updates()
+        time.sleep(60)
 
 @app.route("/")
 def home(): return render_template("chat.html")
@@ -109,18 +129,24 @@ def send():
 def add_user():
     phone = request.form.get("phone")
     if phone:
-        conn = db(); cur = conn.cursor()
+        # تأكد من أن دالة الاتصال بقاعدة البيانات لديك تسمى db()
+        conn = db() 
+        cur = conn.cursor()
         cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
-        conn.commit(); cur.close(); conn.close()
+        conn.commit()
+        cur.close()
+        conn.close()
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
 @app.route("/api/force_check", methods=["POST"])
 def force_check():
-    threading.Thread(target=check_updates).start()
-    return jsonify({"status": "تم بدء الفحص"})
+    # استدعاء دالة الفحص فوراً
+    check_updates()
+    return jsonify({"status": "تم الفحص والإرسال بنجاح"})
 
 @app.route("/webhook", methods=["GET", "POST"])
+
 def webhook():
     if request.method == "GET": return request.args.get("hub.challenge") if request.args.get("hub.verify_token") == VERIFY_TOKEN else "error", 403
     try:
