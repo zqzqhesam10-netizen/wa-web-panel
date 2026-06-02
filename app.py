@@ -52,29 +52,25 @@ from playwright.sync_api import sync_playwright
 
 def check_updates():
     try:
-        print("DEBUG: جاري تشغيل المتصفح الحقيقي...")
+        print("DEBUG: جاري تشغيل المتصفح...")
         with sync_playwright() as p:
-            # تشغيل متصفح خفي (Headless)
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            # تحديد مسار المتصفح الذي تم تحميله في الـ Logs السابقة
+            executable_path = "/opt/render/.cache/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell"
+            
+            browser = p.chromium.launch(
+                headless=True,
+                executable_path=executable_path  # إجبار الكود على استخدام هذا المسار
             )
-            page = context.new_page()
             
-            # الدخول للموقع
+            page = browser.new_page()
             page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
-            
-            # انتظار 10 ثوانٍ ليتم التحقق من أنك إنسان (تجاوز Just a moment)
             page.wait_for_timeout(10000)
             
-            # الحصول على محتوى الصفحة بعد تجاوز الحماية
-            html_content = page.content()
+            soup = BeautifulSoup(page.content(), 'html.parser')
             browser.close()
             
-            # الآن نقوم بـ Parsing للـ HTML الذي حصلنا عليه
-            soup = BeautifulSoup(html_content, 'html.parser')
+            # فحص الروابط
             links = soup.find_all('a', href=True)
-            
             found = False
             for link in links:
                 if '/episode/' in link['href']:
@@ -82,7 +78,7 @@ def check_updates():
                     found = True
             
             if not found:
-                print("DEBUG: تم تجاوز الحماية لكن لم يتم العثور على روابط.")
+                print("DEBUG: تم الوصول للموقع ولكن لم أجد روابط حلقات.")
                 
     except Exception as e:
         print(f"DEBUG: خطأ في Playwright: {e}")
