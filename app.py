@@ -50,34 +50,31 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        print("DEBUG: 1- جاري البحث عن المتصفح...")
-        found_paths = glob.glob("/opt/render/project/src/.playwright/**/chrome", recursive=True)
-        if not found_paths: raise Exception("لم يتم العثور على المتصفح")
+        print("DEBUG: محاولة تحديد مسار المتصفح...")
+        # المسار الافتراضي لـ Playwright على Render
+        browser_path = "/opt/render/project/src/.playwright/chromium-1223/chrome-linux64/chrome"
         
-        print(f"DEBUG: 2- المتصفح موجود في: {found_paths[0]}")
+        print(f"DEBUG: المسار المحدد هو: {browser_path}")
         
-        print("DEBUG: 3- جاري تشغيل Playwright...")
+        # التأكد من وجود الملف قبل البدء
+        if not os.path.exists(browser_path):
+            print("DEBUG: خطأ: المسار غير موجود فعلياً!")
+            return
+
+        print("DEBUG: جاري إطلاق Playwright...")
         with sync_playwright() as p:
-            print("DEBUG: 4- جاري إطلاق المتصفح...")
-            browser = p.chromium.launch(headless=True, executable_path=found_paths[0], args=["--no-sandbox", "--disable-setuid-sandbox"])
-            
-            print("DEBUG: 5- جاري فتح الصفحة...")
+            browser = p.chromium.launch(headless=True, executable_path=browser_path, args=["--no-sandbox", "--disable-setuid-sandbox"])
             page = browser.new_page()
             
-            print("DEBUG: 6- جاري الانتقال للرابط...")
+            print("DEBUG: جاري فتح الصفحة...")
             page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
             
-            print("DEBUG: 7- جاري قراءة المحتوى...")
             content = page.content()
-            
-            print("DEBUG: 8- جاري الإغلاق...")
             browser.close()
-            
-            print("DEBUG: 9- تم الجلب بنجاح!")
-            # ... باقي الكود ...
+            print("DEBUG: نجح الجلب!")
             
     except Exception as e:
-        print(f"DEBUG: خطأ فادح: {e}")
+        print(f"DEBUG: خطأ في العملية: {str(e)}")
 
 def loop():
     while True:
