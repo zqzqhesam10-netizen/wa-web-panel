@@ -48,6 +48,14 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
+def check_updates():
+    try:
+        # فحص TuktukHD
+        check_tuktukhd()
+        # يمكنك إضافة استدعاءات أخرى هنا
+    except Exception as e:
+        print(f"DEBUG: خطأ في الدالة الرئيسية للتشغيل: {e}")
+
 def check_tuktukhd():
     try:
         url = "https://tuktukhd.com/recent/"
@@ -55,19 +63,15 @@ def check_tuktukhd():
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # في tuktukhd، العناوين غالباً تكون داخل كلاسات .post-title أو مشابه
         items = soup.select('.post-title a') 
-        
         if items:
             link = items[0]
             title = link.text.strip()
             item_url = link['href']
             
-            # التحقق من التكرار في قاعدة البيانات
             conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
             if not cur.fetchone():
-                # محاولة الحصول على صورة من نفس العنصر الأب
                 parent = link.find_parent('article') or link.find_parent('div')
                 img_tag = parent.find('img') if parent else None
                 img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
@@ -75,28 +79,19 @@ def check_tuktukhd():
                 print(f"DEBUG: تم العثور على جديد في TuktukHD: {title}")
                 msg = f"🆕 جديد TuktukHD:\n{title}\nالرابط: {item_url}"
                 
-                # إرسال لكل المستخدمين
                 cur.execute("SELECT phone FROM users")
                 users = cur.fetchall()
                 for u in users:
-                    if img_url:
-                        send_image_message(u['phone'], img_url, msg)
-                    else:
-                        send_message(u['phone'], msg)
+                    if img_url: send_image_message(u['phone'], img_url, msg)
+                    else: send_message(u['phone'], msg)
                 
-                # حفظ في الأرشيف
                 cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                             (title, datetime.now().strftime("%H:%M")))
                 conn.commit()
             cur.close(); conn.close()
-            
     except Exception as e:
         print(f"DEBUG: خطأ في فحص TuktukHD: {e}")
-                
-        cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG: خطأ عام في الدالة: {e}")
-
+        
 def loop():
     while True:
         check_updates()
