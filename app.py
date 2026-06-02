@@ -51,8 +51,7 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     url = "https://wecima.bar/category/مسلسلات-مدبلجة/"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-        "Referer": "https://wecima.bar/"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
     }
     
     try:
@@ -61,45 +60,39 @@ def check_updates():
         users = cur.fetchall()
         
         res = requests.get(url, headers=headers, timeout=20)
-        print(f"DEBUG: حالة الموقع: {res.status_code} | طول الصفحة: {len(res.text)}")
-        
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # كشف الهيكلية (في حال لم يجد أي بطاقة)
-        cards = soup.select('div.GridItem, div.post-item, .MoviePost')
-        print(f"DEBUG: تم العثور على {len(cards)} عنصر في الموقع.")
+        # استهداف البطاقات كما تظهر في image_2c15c4.jpg
+        cards = soup.select('div.GridItem')
         
-        # إذا كان العدد 0، سنقوم بطباعة كلاسات الصفحة لنعرف التحديث
-        if len(cards) == 0:
-            print("DEBUG: لم يتم العثور على عناصر بالهيكل الحالي. طباعة بعض الكلاسات المتاحة:")
-            print([tag.get('class') for tag in soup.select('[class]')][:10])
-
         for card in cards:
-            link = card.find('a', href=True)
-            if not link: continue
+            # قراءة كل النص داخل البطاقة (يجمع العنوان والرقم معاً)
+            title = card.get_text(separator=' ', strip=True)
             
-            title = link.get('title') or link.text.strip()
+            # استخراج رابط الصورة
+            img_tag = card.find('img')
+            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
             
-            # الفلترة
-            if title and "مدبلج" in title and any(char.isdigit() for char in title):
-                img_tag = card.find('img')
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+            # شرط الفلترة: يجب أن يحتوي النص على "مدبلج" وأي أرقام (للحلقات)
+            if "مدبلج" in title and any(char.isdigit() for char in title):
                 
-                if img_url:
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"DEBUG: تم اكتشاف حلقة مدبلجة: {title}")
-                        msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title[:100],))
+                if not cur.fetchone():
+                    print(f"DEBUG: تم اكتشاف حلقة مدبلجة: {title}")
+                    
+                    msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
+                    
+                    for u in users:
+                        send_image_message(u['phone'], img_url, msg)
+                    
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                (title[:100], datetime.now().strftime("%H:%M")))
+                    conn.commit()
         
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ عام: {e}")
-
+        print(f"DEBUG: خطأ في الفحص: {e}")
+        
 def loop():
     while True:
         check_updates()
