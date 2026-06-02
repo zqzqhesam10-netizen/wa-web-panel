@@ -2,65 +2,107 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لوحة التحكم</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم - واتساب ويب</title>
     <style>
-        /* تصميم بسيط وأنيق للمحادثة */
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
-        .msg { padding: 10px; margin: 5px 0; border-radius: 10px; }
-        .me { background: #dcf8c6; text-align: left; }
-        .them { background: #ececec; text-align: right; }
-        #statusBtn { float: left; cursor: pointer; padding: 5px; }
+        /* [التصميم الذي تفضله - مدمج فيه زر الحالة] */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { display: flex; height: 100vh; background-color: #dadbd3; }
+        .sidebar { width: 380px; background: #fff; display: flex; flex-direction: column; border-left: 1px solid #e9edef; }
+        .sidebar-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; justify-content: space-between; }
+        .header-actions { display: flex; gap: 8px; }
+        .text-btn { border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; }
+        .broadcast { background-color: #0284c7; }
+        .new-chat { background-color: #00a884; }
+        .user-list { flex: 1; overflow-y: auto; }
+        .user-item { padding: 16px; border-bottom: 1px solid #f0f2f5; cursor: pointer; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2; }
+        .messages-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+        .bubble { padding: 10px; border-radius: 8px; max-width: 65%; }
+        .me { background: #d9fdd3; align-self: flex-start; }
+        .them { background: #ffffff; align-self: flex-end; }
+        .input-area { height: 62px; background: #f0f2f5; display: flex; padding: 5px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <button id="statusBtn" onclick="checkStatus()">🟢 الحالة</button>
-        <h2>المحادثات</h2>
-        <div id="messagesContainer" style="height: 400px; overflow-y: scroll;"></div>
-        
-        <input type="text" id="phoneInput" placeholder="رقم الهاتف">
-        <input type="text" id="msgInput" placeholder="الرسالة">
-        <button onclick="sendMessage()">إرسال</button>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span>المحادثات</span>
+            <div class="header-actions">
+                <button class="text-btn" style="background-color: #667781;" onclick="checkStatus()">🟢</button>
+                <button class="text-btn broadcast" onclick="openBroadcastModal()">📢</button>
+                <button class="text-btn new-chat" onclick="openNewChatModal()">➕</button>
+            </div>
+        </div>
+        <div class="user-list" id="userList"></div>
+    </div>
+
+    <div class="chat-area" id="chatArea" style="display: none;">
+        <div class="chat-header" id="currentChatUser" style="padding: 15px; background: #f0f2f5;"></div>
+        <div class="messages-container" id="messagesContainer"></div>
+        <div class="input-area">
+            <form id="sendForm" onsubmit="sendMessage(event)" style="display:flex; width:100%;">
+                <input type="hidden" id="activePhone">
+                <input type="text" id="messageInput" style="flex:1;" placeholder="اكتب رسالة...">
+                <button type="submit">إرسال</button>
+            </form>
+        </div>
     </div>
 
     <script>
         // زر الحالة
         function checkStatus() {
-            fetch('/api/status').then(r => r.json()).then(d => alert(d.message));
+            fetch('/api/status')
+            .then(r => r.json())
+            .then(d => alert("حالة المراقبة: " + d.message))
+            .catch(() => alert("تعذر الاتصال بالسيرفر"));
         }
 
-        // جلب الرسائل وتحديثها
-        function fetchMessages() {
-            const phone = document.getElementById('phoneInput').value;
-            if(!phone) return;
+        // جلب المستخدمين
+        fetch('/api/users').then(r => r.json()).then(data => {
+            const list = document.getElementById('userList');
+            list.innerHTML = data.users.map(u => `
+                <div class="user-item" onclick="openChat('${u.phone}')">
+                    ${u.phone}
+                </div>`).join('');
+        });
+
+        // فتح محادثة
+        function openChat(phone) {
+            document.getElementById('activePhone').value = phone;
+            document.getElementById('currentChatUser').innerText = phone;
+            document.getElementById('chatArea').style.display = 'flex';
+            fetchMessages(phone);
+        }
+
+        // جلب الرسائل
+        function fetchMessages(phone) {
             fetch(`/api/messages/${phone}`)
             .then(r => r.json())
             .then(data => {
                 const cont = document.getElementById('messagesContainer');
                 cont.innerHTML = data.messages.map(m => `
-                    <div class="msg ${m.sender === 'me' ? 'me' : 'them'}">
+                    <div class="bubble ${m.sender === 'me' ? 'me' : 'them'}">
                         ${m.message} <small>(${m.msg_time})</small>
                     </div>`).join('');
+                cont.scrollTop = cont.scrollHeight;
             });
         }
 
         // إرسال رسالة
-        function sendMessage() {
-            const phone = document.getElementById('phoneInput').value;
-            const message = document.getElementById('msgInput').value;
+        function sendMessage(e) {
+            e.preventDefault();
+            const phone = document.getElementById('activePhone').value;
+            const msg = document.getElementById('messageInput').value;
             const formData = new FormData();
             formData.append('phone', phone);
-            formData.append('message', message);
-            
+            formData.append('message', msg);
             fetch('/send', { method: 'POST', body: formData }).then(() => {
-                document.getElementById('msgInput').value = '';
-                fetchMessages();
+                document.getElementById('messageInput').value = '';
+                fetchMessages(phone);
             });
         }
-
-        // تحديث تلقائي كل 5 ثوانٍ
-        setInterval(fetchMessages, 5000);
     </script>
 </body>
 </html>
