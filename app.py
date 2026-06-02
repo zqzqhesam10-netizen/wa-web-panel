@@ -49,9 +49,10 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 def check_updates():
+    # تعريف المواقع التي سنفحصها
     sites = [
-        {"url": "https://web6112x.faselhdx.bid/recent_series", "name": "fasel"},
-        {"url": "https://wecima.bar/category/مسلسلات-مدبلجة/", "name": "wecima"}
+        {"url": "https://web6112x.faselhdx.bid/recent_series", "name": "fasel", "keyword": "مسلسل"},
+        {"url": "https://wecima.bar/category/مسلسلات-مدبلجة/", "name": "wecima", "keyword": "مدبلج"}
     ]
     
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
@@ -62,22 +63,23 @@ def check_updates():
         users = cur.fetchall()
         
         for site in sites:
+            print(f"DEBUG: جاري فحص الموقع: {site['name']}")
             try:
                 res = requests.get(site["url"], headers=headers, timeout=15)
                 soup = BeautifulSoup(res.text, 'html.parser')
-                
-                # البحث عن أول حلقة مطابقة في هذا الموقع
+
                 for link in soup.find_all('a', href=True):
                     title = (link.get('title') or link.text).strip().split('\n')[0].strip()
                     
-                    if title and ("مسلسل" in title or "مدبلج" in title) and any(char.isdigit() for char in title):
+                    # البحث يعتمد على الكلمة المفتاحية المخصصة لكل موقع
+                    if title and site['keyword'] in title and any(char.isdigit() for char in title):
                         img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                         
                         if img_url and not img_url.endswith('.gif'):
                             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                             if not cur.fetchone():
-                                print(f"DEBUG: تم العثور على محتوى جديد من {site['name']}: {title}")
+                                print(f"DEBUG: محتوى جديد من {site['name']}: {title}")
                                 msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
                                 
                                 for u in users:
@@ -86,10 +88,10 @@ def check_updates():
                                 cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                             (title, datetime.now().strftime("%H:%M")))
                                 conn.commit()
-                                break # هذا الـ break ينهي البحث في الموقع الحالي فقط وينتقل للموقع التالي
+                                # نكتفي بأول نتيجة لكل موقع ثم ننتقل للموقع التالي
+                                break 
             except Exception as e:
                 print(f"Error checking {site['name']}: {e}")
-                continue # يكمل للموقع التالي حتى لو فشل الموقع الحالي
                 
         cur.close(); conn.close()
     except Exception as e:
