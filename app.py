@@ -4,7 +4,6 @@ from psycopg2.extras import RealDictCursor
 from bs4 import BeautifulSoup
 from datetime import datetime
 import cloudscraper
-from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
@@ -50,46 +49,43 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
+import glob
+from playwright.sync_api import sync_playwright
+
 def check_updates():
     try:
-        print("DEBUG: جاري محاولة سحب البيانات عبر cloudscraper...")
-        
-        # إنشاء كائن scraper لتجاوز الحماية
-        scraper = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'desktop': True
-            }
-        )
-        
-        # الرابط المطلوب
-        target_url = "https://w1.anime4up.rest/episode/"
-        
-        # تنفيذ الطلب
-        response = scraper.get(target_url, timeout=30)
-        
-        if response.status_code == 200:
-            print("DEBUG: تم الاتصال بالموقع بنجاح!")
-            soup = BeautifulSoup(response.text, 'html.parser')
+        print("DEBUG: جاري البحث عن المتصفح...")
+        with sync_playwright() as p:
+            # هذا الكود سيبحث تلقائياً عن ملف الـ chrome داخل مجلد .playwright
+            # ولن تضطر لتغيير المسار إذا تغير الإصدار
+            search_path = "/opt/render/project/src/.playwright/**/chrome"
+            found_paths = glob.glob(search_path, recursive=True)
             
-            # البحث عن الروابط
-            links = soup.find_all('a', href=True)
-            found_count = 0
+            if not found_paths:
+                raise Exception("لم يتم العثور على ملف المتصفح! تأكد من build.sh")
             
-            for link in links:
-                if '/episode/' in link['href']:
-                    found_count += 1
-                    print(f"DEBUG: تم العثور على حلقة: {link.get_text(strip=True)}")
-                    # هنا يمكنك إضافة كود الإرسال للواتساب إذا أردت
+            browser_path = found_paths[0]
+            print(f"DEBUG: تم العثور على المتصفح في: {browser_path}")
+
+            browser = p.chromium.launch(
+                headless=True,
+                executable_path=browser_path,
+                args=["--no-sandbox", "--disable-setuid-sandbox"]
+            )
             
-            if found_count == 0:
-                print("DEBUG: تم الوصول للموقع ولكن لم أجد روابط حلقات.")
-        else:
-            print(f"DEBUG: فشل الاتصال بالموقع، كود الحالة: {response.status_code}")
+            page = browser.new_page()
+            page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"})
+            
+            page.goto("https://w1.anime4up.rest/episode/", timeout=60000)
+            page.wait_for_timeout(5000)
+            
+            # هنا يمكنك إضافة كود BeautifulSoup كما كنت تفعل
+            content = page.content()
+            browser.close()
+            print("DEBUG: تم جلب المحتوى بنجاح.")
             
     except Exception as e:
-        print(f"DEBUG: حدث خطأ أثناء السحب: {str(e)}")
+        print(f"DEBUG: خطأ في Playwright: {str(e)}")
         
 def loop():
     while True:
