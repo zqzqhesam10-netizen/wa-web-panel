@@ -57,30 +57,39 @@ def check_updates():
         soup = BeautifulSoup(res.content, 'html.parser')
         cards = soup.select('div.GridItem')
         
-        # فحص أول 5 حلقات فقط لضمان الأداء
+        # 1. الفحص فقط: نكتفي بجمع الحلقات الجديدة في قاعدة البيانات
         for card in cards[:5]:
             title = card.get_text(separator=' ', strip=True)
             img_tag = card.find('img')
             img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
             
             if "مدبلج" in title and any(char.isdigit() for char in title):
-                print(f"DEBUG: إرسال مباشر للحلقة: {title}")
-                msg = f"🎙️ *جديد وي سيما - مدبلج*\n\n🎬 {title}\n🔥 متاح الآن للمشاهدة!"
+                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
                 
-                conn = db()
-                cur = conn.cursor(cursor_factory=RealDictCursor)
-                cur.execute("SELECT phone FROM users")
-                users = cur.fetchall()
-                cur.close()
-                conn.close()
-                
-                # الإرسال مع تأخير لمنع الانهيار (SIGKILL)
-                for u in users:
-                    send_image_message(u['phone'], img_url, msg)
-                    time.sleep(2) # تأخير 2 ثانية بين كل رسالة لتهدئة السيرفر
+                # تخزين الحلقة في جدول 'queue' (يجب أن يكون لديك هذا الجدول)
+                cur.execute("INSERT INTO queue (title, img_url) VALUES (%s, %s) ON CONFLICT DO NOTHING", (title, img_url))
+                conn.commit()
+                cur.close(); conn.close()
                 
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
+
+# 2. دالة إرسال منفصلة (استدعها بشكل دوري، لا تضعها داخل الفحص)
+def process_queue():
+    conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM queue LIMIT 3")
+    items = cur.fetchall()
+    
+    for item in items:
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
+        for u in users:
+            send_image_message(u['phone'], item['img_url'], f"🎙️ جديد: {item['title']}")
+        
+        cur.execute("DELETE FROM queue WHERE id = %s", (item['id'],))
+    
+    conn.commit()
+    cur.close(); conn.close()
         
 def loop():
     while True:
