@@ -26,9 +26,8 @@
         .user-list { flex: 1; overflow-y: auto; background: #fff; }
         .user-item { display: flex; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f2f5; height: 72px; }
         .user-item:hover { background: #f5f6f6; }
-        .user-item.active { background: #eaebeb; }
-        .user-info { margin-right: 15px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
         .user-name { font-weight: 500; color: #111b21; font-size: 16px; text-align: right; }
+        .user-info { margin-right: 15px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
 
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2 url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-repeat: repeat; }
         .chat-header { height: 60px; background: #f0f2f5; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #e9edef; }
@@ -55,20 +54,13 @@
         .modal-btn.confirm { background: #00a884; color: white; }
         .modal-btn.broadcast-confirm { background: #0284c7; color: white; }
         .modal-btn.cancel { background: white; color: #54656f; border: 1px solid #e9edef; }
-        #context-menu { display: none; position: absolute; z-index: 1000; background: white; border: 1px solid #ccc; padding: 5px 0; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 8px; width: 180px; }
-        #context-menu div { padding: 10px 15px; font-size: 14px; }
     </style>
 </head>
 <body>
-    <div id="context-menu">
-        <div onclick="deleteChat()">🗑️ حذف الرسائل</div>
-        <div onclick="deleteContact()" style="color: red;">❌ حذف الرقم نهائياً</div>
-    </div>
-
     <div class="modal" id="newChatModal">
         <div class="modal-content">
             <h3>بدء محادثة جديدة</h3>
-            <input type="text" id="newPhoneInput" placeholder="96777000000" autocomplete="off" style="direction: ltr; text-align: left;">
+            <input type="text" id="newPhoneInput" placeholder="96777000000" autocomplete="off" style="direction: ltr; text-align: left; width: 100%; padding: 10px; margin: 10px 0;">
             <div class="modal-actions">
                 <button class="modal-btn cancel" onclick="closeNewChatModal()">إلغاء</button>
                 <button class="modal-btn confirm" onclick="createNewChat()">إضافة وفتح</button>
@@ -79,7 +71,7 @@
     <div class="modal" id="broadcastModal">
         <div class="modal-content broadcast-modal">
             <h3>إرسال رسالة جماعية 📢</h3>
-            <textarea id="broadcastMessageInput" placeholder="اكتب الرسالة..."></textarea>
+            <textarea id="broadcastMessageInput" placeholder="اكتب الرسالة..." style="width: 100%; height: 100px; margin: 10px 0;"></textarea>
             <div class="modal-actions">
                 <button class="modal-btn cancel" onclick="closeBroadcastModal()">إلغاء</button>
                 <button class="modal-btn broadcast-confirm" onclick="sendBroadcast()">إرسال للكل</button>
@@ -100,9 +92,7 @@
             </div>
         </div>
         <div class="search-box">
-            <div class="search-inner">
-                <input type="text" id="searchInput" placeholder="البحث...">
-            </div>
+            <div class="search-inner"><input type="text" id="searchInput" placeholder="البحث..."></div>
         </div>
         <div class="user-list"></div>
     </div>
@@ -122,24 +112,22 @@
         </div>
     </div>
 
-    <div class="welcome-screen" id="welcomeScreen">
-        <h2>لوحة التحكم</h2>
-    </div>
+    <div class="welcome-screen" id="welcomeScreen"><h2>لوحة التحكم</h2></div>
 
     <script>
         let currentPhone = "";
-        
+        let rawUsersList = [];
+
         function checkStatus() {
-            fetch('/api/status')
-            .then(res => res.json())
-            .then(data => alert(data.message))
-            .catch(() => alert("خطأ في الاتصال بالسيرفر"));
+            fetch('/api/status').then(r => r.json()).then(d => alert(d.message)).catch(() => alert("خطأ"));
         }
 
-        // ... (باقي دوالك الأصلية كما هي)
         document.addEventListener("DOMContentLoaded", fetchUsersList);
         function fetchUsersList() {
-            fetch('/api/users').then(res => res.json()).then(data => renderUsers(data.users || data));
+            fetch('/api/users').then(r => r.json()).then(data => {
+                rawUsersList = data.users || data;
+                renderUsers(rawUsersList);
+            });
         }
 
         function renderUsers(users) {
@@ -162,9 +150,7 @@
 
         function fetchMessages() {
             if (!currentPhone) return;
-            fetch(`/api/messages/${currentPhone}`)
-            .then(res => res.json())
-            .then(data => {
+            fetch(`/api/messages/${currentPhone}`).then(r => r.json()).then(data => {
                 const container = document.getElementById('messagesContainer');
                 container.innerHTML = data.messages.map(msg => `
                     <div class="msg-row ${msg.sender === 'me' ? 'me' : 'them'}">
@@ -181,43 +167,36 @@
             const formData = new FormData();
             formData.append('phone', phone);
             formData.append('message', msg);
-            fetch('/send', { method: 'POST', body: formData })
-            .then(() => { document.getElementById('messageInput').value = ''; fetchMessages(); });
+            fetch('/send', { method: 'POST', body: formData }).then(() => {
+                document.getElementById('messageInput').value = '';
+                fetchMessages();
+            });
         }
 
-        // إضافة رقم جديد
-function createNewChat() {
-    const phone = document.getElementById('newPhoneInput').value;
-    const formData = new FormData();
-    formData.append('phone', phone);
-    
-    fetch('/api/add_user', { method: 'POST', body: formData })
-    .then(r => r.json())
-    .then(data => {
-        if(data.status === 'ok') {
-            alert("تمت الإضافة!");
-            closeNewChatModal();
-            location.reload(); // تحديث القائمة
+        function createNewChat() {
+            const phone = document.getElementById('newPhoneInput').value;
+            const formData = new FormData();
+            formData.append('phone', phone);
+            fetch('/api/add_user', { method: 'POST', body: formData }).then(r => r.json()).then(data => {
+                if(data.status === 'ok') { alert("تمت الإضافة!"); location.reload(); }
+            });
         }
-    });
-}
 
-// الإرسال الجماعي (البث)
-function sendBroadcast() {
-    const msg = document.getElementById('broadcastMessageInput').value;
-    // جلب كل الأرقام من القائمة
-    const phones = rawUsersList.map(u => u.phone);
-    
-    phones.forEach(phone => {
-        const formData = new FormData();
-        formData.append('phone', phone);
-        formData.append('message', msg);
-        fetch('/send', { method: 'POST', body: formData });
-    });
-    
-    alert("جاري الإرسال للجميع...");
-    closeBroadcastModal();
-}
+        async function sendBroadcast() {
+            const msg = document.getElementById('broadcastMessageInput').value;
+            if(!msg) return;
+            alert("جاري الإرسال...");
+            for (let u of rawUsersList) {
+                const formData = new FormData();
+                formData.append('phone', u.phone);
+                formData.append('message', msg);
+                await fetch('/send', { method: 'POST', body: formData });
+            }
+            alert("تم الإرسال للجميع");
+            closeBroadcastModal();
+        }
+
+        function openNewChatModal() { document.getElementById('newChatModal').style.display = 'flex'; }
         function closeNewChatModal() { document.getElementById('newChatModal').style.display = 'none'; }
         function openBroadcastModal() { document.getElementById('broadcastModal').style.display = 'flex'; }
         function closeBroadcastModal() { document.getElementById('broadcastModal').style.display = 'none'; }
