@@ -91,6 +91,20 @@ def send():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"status": "ok"})
 
+@app.route("/api/add_user", methods=["POST"])
+def add_user():
+    phone = request.form.get("phone")
+    if phone:
+        # تأكد من أن دالة الاتصال بقاعدة البيانات لديك تسمى db()
+        conn = db() 
+        cur = conn.cursor()
+        cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "error"}), 400
+
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET": return request.args.get("hub.challenge") if request.args.get("hub.verify_token") == VERIFY_TOKEN else "error", 403
