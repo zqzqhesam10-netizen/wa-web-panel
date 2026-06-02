@@ -49,11 +49,12 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 def check_updates():
-    # قائمة المواقع التي تريد مراقبتها
     sites = [
         {"url": "https://web6112x.faselhdx.bid/recent_series", "keyword": "مسلسل"},
-        {"url": "https://5tv.lol/new-episodes/", "keyword": ""}, # فارغ ليقبل أي محتوى
+        {"url": "https://5tv.lol/new-episodes/", "keyword": "الحلقة"}
     ]
+    
+    keywords = ["انمي", "مسلسل", "الحلقة", "حلقة", "فيلم", "برنامج"]
     
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -67,23 +68,27 @@ def check_updates():
                 res = requests.get(site['url'], headers=headers, timeout=15)
                 soup = BeautifulSoup(res.text, 'html.parser')
 
-                # منطق البحث الثابت الذي طلبته
-                for link in soup.find_all('a', href=True):
-                    title = link.get('title') or link.text.strip()
+                # في موقع مثل 5TV، الروابط عادة داخل إطارات (divs أو articles)
+                # سنبحث عن العناصر التي تحتوي على 'img' و 'a' في نفس الإطار
+                for card in soup.select('div.card, article, .post-item'):
+                    link = card.find('a', href=True)
+                    if not link: continue
                     
-                    # التحقق من الكلمة المفتاحية (إن وجدت) ووجود نص معقول
-                    if title and len(title) > 5 and site['keyword'] in title:
+                    title = link.get('title') or link.text.strip()
+                    if not title: continue
+                    
+                    # الفلترة الذكية
+                    is_valid = any(k in title for k in keywords) and any(char.isdigit() for char in title)
+                    if len(title) > 5 and is_valid and "جميع" not in title:
                         
-                        # محاولة العثور على صورة
-                        img_tag = link.find('img') or link.find_previous('img') or link.find_next('img')
+                        img_tag = card.find('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
                         
-                        if img_url and not img_url.endswith('.gif'):
-                            # التحقق من عدم التكرار
+                        if img_url:
                             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                             if not cur.fetchone():
-                                print(f"DEBUG: تم العثور على محتوى جديد: {title}")
-                                msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                                print(f"DEBUG: تم التقاط محتوى جديد: {title}")
+                                msg = f"✨ {title}\n🔥 متاح الآن للمشاهدة!"
                                 
                                 for u in users:
                                     send_image_message(u['phone'], img_url, msg)
@@ -91,7 +96,7 @@ def check_updates():
                                 cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                             (title, datetime.now().strftime("%H:%M")))
                                 conn.commit()
-                                break # نكتفي بأول عنصر جديد للموقع الحالي
+                                break # نكتفي بأول عنصر في الموقع للانتقال للتالي
             except Exception as e:
                 print(f"DEBUG: خطأ في فحص {site['url']}: {e}")
                 
