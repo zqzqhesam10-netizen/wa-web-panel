@@ -50,23 +50,42 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
+        
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
         site_url = "https://web6112x.faselhdx.bid/recent_series"
         res = requests.get(site_url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # طباعة كل العناوين الموجودة في الصفحة لاختيار الكلاس الصحيح
-        print("DEBUG: --- جاري كشف هيكل الموقع ---")
-        for h in soup.find_all(['h2', 'h3', 'a']):
-            if len(h.text.strip()) > 5:
-                print(f"DEBUG: وجدت عنوان: {h.text.strip()}")
-        
-        # طباعة كل الصور
-        for img in soup.find_all('img'):
-            print(f"DEBUG: وجدت صورة: {img.get('src')}")
+        # الهيكل الجديد: نجد كل الـ div التي تحتوي على كلمة "مسلسل"
+        # هذه الطريقة ستجلب لنا فقط عناوين المسلسلات الجديدة
+        for div in soup.find_all('div', class_='post'):
+            title_tag = div.find('h3') or div.find('a', title=True)
+            img_tag = div.find('img')
             
+            if title_tag:
+                title = title_tag.text.strip()
+                # التأكد أننا وجدنا مسلسلاً حقيقياً (يحتوي كلمة مسلسل)
+                if "مسلسل" in title:
+                    img_url = img_tag.get('data-src') or img_tag.get('src') # سحب الصورة الحقيقية
+                    
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                    if not cur.fetchone():
+                        print(f"DEBUG: إرسال تحديث: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        
+                        for u in users:
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (title, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        break # نكتفي بأول مسلسل جديد فقط
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
 
 def loop():
     while True:
