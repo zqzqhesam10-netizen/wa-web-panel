@@ -20,26 +20,25 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
-# دالة إرسال القالب الرسمية (ضرورية للإشعارات التلقائية)
 def send_template_message(phone, image_url, title):
-    try:
-        url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone,
-            "type": "template",
-            "template": {
-                "name": "new_media_update",
-                "language": {"code": "ar"},
-                "components": [
-                    {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]},
-                    {"type": "body", "parameters": [{"type": "text", "text": title}]}
-                ]
-            }
+    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "template",
+        "template": {
+            "name": "new_media_update",
+            "language": {"code": "ar"},
+            "components": [
+                {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]},
+                {"type": "body", "parameters": [{"type": "text", "text": title}]}
+            ]
         }
-        requests.post(url, json=payload, headers=headers)
-        print(f"DEBUG: Meta Response: {response.text}")
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    # هذا السطر سيظهر لك سبب الرفض في الـ Logs الخاصة بـ Render
+    print(f"DEBUG: Meta API Response: {response.status_code} - {response.text}")
         
     except: pass
 
