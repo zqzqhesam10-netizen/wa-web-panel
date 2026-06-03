@@ -49,6 +49,7 @@ def send_image_message(phone, image_url, caption):
     except: pass
         
 import cloudscraper
+import re
 
 def check_updates():
     try:
@@ -56,31 +57,30 @@ def check_updates():
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        # استخدام cloudscraper لتجاوز الحماية
         scraper = cloudscraper.create_scraper()
         url = "https://www.fasel-hd.cam/most_recent"
         res = scraper.get(url, timeout=20)
-        
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # الكلمات المفتاحية للبحث
+        # 1. كلمات البحث
         keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+        # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
+        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
         for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
             
-            # التحقق من وجود أي من الكلمات المفتاحية
-            if title and any(word in title for word in keywords):
-                
-                # البحث عن الصورة (بناءً على بنية موقع فاصول)
-                img_tag = link.find('img') or link.find_previous('img')
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
-                
-                if img_url and not img_url.endswith('.gif'):
-                    # التحقق من عدم التكرار
+            # فلترة ذكية: يجب أن يحتوي على كلمة بحث، ولا يحتوي على كلمة استبعاد، ويجب أن يحتوي على رقم (دلالة حلقة)
+            if title and any(k in title for k in keywords):
+                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
+                    
+                    img_tag = link.find('img') or link.find_previous('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                    
+                    # التحقق من عدم التكرار في قاعدة البيانات
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        print(f"DEBUG: تم العثور على: {title}")
+                        print(f"✅ تم العثور على محتوى جديد: {title}")
                         msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
                         
                         for u in users:
@@ -92,7 +92,7 @@ def check_updates():
                         break 
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ في الدمج: {e}")
         
 def loop():
     while True:
