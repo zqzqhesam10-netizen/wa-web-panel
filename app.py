@@ -48,49 +48,39 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-import re
-
 def check_updates():
     try:
-        url = "https://m.asd.ink/feed/"
+        # هذا هو رابط الـ API الرسمي للموقع
+        url = "https://m.asd.ink/wp-json/wp/v2/posts?per_page=5"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        
         res = requests.get(url, headers=headers, timeout=20)
+        data = res.json() # تحويل الاستجابة مباشرة إلى قائمة من المسلسلات
         
-        # البحث عن العناوين والروابط مباشرة في النص الخام باستخدام Regex
-        # هذا يتجاهل تماماً أي تعقيدات في الـ XML
-        titles = re.findall(r'<title>(.*?)</title>', res.text)
-        links = re.findall(r'<link>(.*?)</link>', res.text)
-        descriptions = re.findall(r'<description>(.*?)</description>', res.text)
+        # الحصول على أحدث مسلسل
+        latest = data[0]
+        title = latest['title']['rendered']
+        link = latest['link']
         
-        # استبعاد العنوان الأول (لأنه عنوان الموقع نفسه وليس حلقة)
-        if len(titles) > 1:
-            title = titles[1]
-            link = links[1]
-            desc = descriptions[1] if len(descriptions) > 1 else ""
+        # جلب الصورة (موجودة في الـ 'featured_media' أو 'jetpack_featured_media_url')
+        img_url = latest.get('jetpack_featured_media_url') or "https://i.imgur.com/example.jpg"
+
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+        
+        if not cur.fetchone():
+            print(f"DEBUG: تم العثور عبر الـ API على: {title}")
+            cur.execute("SELECT phone FROM users")
+            users = cur.fetchall()
+            for u in users:
+                send_image_message(u['phone'], img_url, f"🇹🇷 {title}\n🔥 متاح الآن:\n{link}")
             
-            # استخراج الصورة من الوصف
-            img_match = re.search(r'src="(.*?)"', desc)
-            img_url = img_match.group(1) if img_match else "https://i.imgur.com/example.jpg"
-            
-            conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-            
-            if not cur.fetchone():
-                print(f"DEBUG: تم العثور على: {title}")
-                # إرسال الرسالة
-                cur.execute("SELECT phone FROM users")
-                for u in cur.fetchall():
-                    send_image_message(u['phone'], img_url, f"🇹🇷 {title}\n🔥 متاح الآن:\n{link}")
-                
-                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                            (title, datetime.now().strftime("%H:%M")))
-                conn.commit()
-            cur.close(); conn.close()
-        else:
-            print("DEBUG: لم يتم العثور على عناصر في الـ Feed.")
-            
+            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                        (title, datetime.now().strftime("%H:%M")))
+            conn.commit()
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ في الـ API: {e}")
 
 def loop():
     while True:
