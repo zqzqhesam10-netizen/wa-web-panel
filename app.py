@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template
+import os, requests, psycopg2, subprocess, sys
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
@@ -39,10 +40,9 @@ def send_template_message(phone, image_url, title):
     except Exception:
         pass
 
-from bs4 import BeautifulSoup
-import os, threading, time, requests, psycopg2, cloudscraper
-
 def check_updates():
+    from bs4 import BeautifulSoup
+    import cloudscraper
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
