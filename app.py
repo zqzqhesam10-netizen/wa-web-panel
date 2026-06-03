@@ -48,10 +48,6 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
-import cloudscraper
-
-import re
-
 import re
 
 def check_updates():
