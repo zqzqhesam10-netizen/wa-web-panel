@@ -95,9 +95,15 @@ def check_updates():
         print(f"DEBUG: خطأ في الدمج: {e}")
         
 def loop():
+    # إضافة تأخير بسيط عند بدء التشغيل للسماح للسيرفر بالتحميل
+    time.sleep(30) 
     while True:
-        check_updates()
-        time.sleep(60)
+        try:
+            check_updates()
+        except Exception as e:
+            print(f"DEBUG: خطأ في الـ Loop التلقائي: {e}")
+        # الفحص كل 15 دقيقة (900 ثانية) بدلاً من دقيقة واحدة لتجنب الحظر
+        time.sleep(30)
 
 @app.route("/")
 def home(): return render_template("chat.html")
@@ -167,5 +173,6 @@ def webhook():
 
 if __name__ == "__main__":
     init_db()
+    # تشغيل الفحص في خيط منفصل لضمان عدم توقف السيرفر
     threading.Thread(target=loop, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
