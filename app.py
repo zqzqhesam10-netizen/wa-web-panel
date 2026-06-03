@@ -43,7 +43,7 @@ def send_template_message(phone, image_url, title):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-     try:
+    try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
