@@ -53,46 +53,20 @@ import re
 
 def check_updates():
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        
         scraper = cloudscraper.create_scraper()
-        url = "https://www.fasel-hd.cam/most_recent"
-        res = scraper.get(url, timeout=20)
+        res = scraper.get("https://www.fasel-hd.cam/most_recent", timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # 1. كلمات البحث
-        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
-        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
-
-        for link in soup.find_all('a', href=True):
-            title = link.get('title') or link.text.strip()
+        
+        # جلب كل العناوين الموجودة في الصفحة
+        links = soup.select('.post-title a')
+        print(f"DEBUG: وجدت {len(links)} عنوان في الصفحة.")
+        
+        # طباعة أول 3 عناوين في الـ Logs لنعرف ما الذي يراه البوت
+        for i, link in enumerate(links[:3]):
+            print(f"DEBUG: عنوان {i+1}: {link.text.strip()}")
             
-            # فلترة ذكية: يجب أن يحتوي على كلمة بحث، ولا يحتوي على كلمة استبعاد، ويجب أن يحتوي على رقم (دلالة حلقة)
-            if title and any(k in title for k in keywords):
-                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
-                    
-                    img_tag = link.find('img') or link.find_previous('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    
-                    # التحقق من عدم التكرار في قاعدة البيانات
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"✅ تم العثور على محتوى جديد: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                        
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        break 
-        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الدمج: {e}")
+        print(f"DEBUG: خطأ: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
