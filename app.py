@@ -67,28 +67,32 @@ def check_updates():
         # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
         exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
-        for link in soup.find_all('a', href=True):
+# نأخذ كل العناصر التي تظهر في الصفحة (الأحدث أولاً)
+        links = soup.select('.post-title a') # تأكد من الـ Selector المناسب لموقعك
+        
+        # نعكس القائمة لنبدأ من الأقدم للأحدث (حتى يرسل بالترتيب الصحيح)
+        for link in reversed(links):
             title = link.get('title') or link.text.strip()
             
-            # فلترة ذكية: يجب أن يحتوي على كلمة بحث، ولا يحتوي على كلمة استبعاد، ويجب أن يحتوي على رقم (دلالة حلقة)
-            if title and any(k in title for k in keywords):
-                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
-                    
+            # فلترة
+            if title and any(k in title for k in keywords) and not any(e in title for e in exclude_words):
+                
+                # فحص هل هذا العنصر موجود في قاعدة البيانات
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                if not cur.fetchone():
+                    # إذا لم يكن موجوداً، فهو "جديد" ويجب إرساله
                     img_tag = link.find('img') or link.find_previous('img')
                     img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                     
-                    # التحقق من عدم التكرار في قاعدة البيانات
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"✅ تم العثور على محتوى جديد: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                        
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
+                    for u in users: 
+                        send_image_message(u['phone'], img_url, msg)
+                    
+                    # حفظ أنه تم الإرسال
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                (title, datetime.now().strftime("%H:%M")))
+                    conn.commit()
+                    # لا نستخدم break هنا حتى يكمل إرسال كل العناصر الجديدة التي وجدها
                         break 
         cur.close(); conn.close()
     except Exception as e:
