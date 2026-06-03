@@ -35,17 +35,31 @@ def send_message(phone, message):
                       json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
     except: pass
 
-# دالة إرسال الصورة (جديدة)
-def send_image_message(phone, image_url, caption):
-    try:
-        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
-                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
-                      json={
-                          "messaging_product": "whatsapp",
-                          "to": phone,
-                          "type": "image",
-                          "image": {"link": image_url, "caption": caption}
-                      })
+def send_template_message(phone, image_url, title):
+    # تأكد من استخدام v20.0 للوصول لأحدث الميزات
+    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "template",
+        "template": {
+            "name": "new_media_update",  # اسم القالب الذي ستنشئه في لوحة تحكم فيسبوك
+            "language": {"code": "ar"},
+            "components": [
+                {
+                    "type": "header",
+                    "parameters": [{"type": "image", "image": {"link": image_url}}]
+                },
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": title}]
+                }
+            ]
+        }
+    }
+    requests.post(url, json=payload, headers=headers)
+    
     except: pass
         
 import cloudscraper
