@@ -50,38 +50,53 @@ def send_image_message(phone, image_url, caption):
         
 import cloudscraper
 
+import re
+
 def check_updates():
     try:
-        # إنشاء scraper يتجاوز الحماية
-        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
+        url = "https://m.asd.ink/feed/"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        res = requests.get(url, headers=headers, timeout=20)
         
-        url = "https://m.asd.ink/category/turkish-series-2/"
-        res = scraper.get(url, timeout=20)
+        soup = BeautifulSoup(res.content, 'xml')
+        items = soup.find_all('item')
         
-        print(f"DEBUG: طول الصفحة مع scraper: {len(res.text)}")
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
+
+        # فحص أحدث عنصر
+        item = items[0]
+        title = item.title.text.strip()
+        link = item.link.text.strip()
         
-        soup = BeautifulSoup(res.text, 'html.parser')
+        # محاولة استخراج رابط الصورة من وصف الحلقة (description)
+        desc = item.description.text
+        img_match = re.search(r'src="(.*?)"', desc)
+        img_url = img_match.group(1) if img_match else "https://i.imgur.com/example.jpg"
         
-        # البحث عن البطاقات (تم تجربة col-6، جرب الآن البحث العام)
-        # هذا المحدد سيجد أي div يحتوي على روابط للمسلسلات
-        items = soup.find_all('a', href=True)
+        # تصنيف الحلقة
+        categories = [c.text for c in item.find_all('category')]
         
-        found = False
-        for link in items:
-            # فلتر: أي رابط يحتوي على "series" أو "turkish"
-            if "turkish" in link['href'] or "series" in link['href']:
-                title = link.get('title') or link.text.strip()
-                if len(title) > 5:
-                    print(f"✅ تم العثور على: {title}")
-                    found = True
-                    # هنا تضع كود الإرسال الخاص بك...
-                    break
-        
-        if not found:
-            print("DEBUG: لم يتم العثور على روابط مسلسلات بالفلتر الحالي")
+        # شرط الفحص: إذا كان التصنيف "مسلسلات تركية"
+        if "مسلسلات تركية" in categories:
             
+            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+            if not cur.fetchone():
+                print(f"DEBUG: تم العثور على حلقة تركية جديدة: {title}")
+                msg = f"🇹🇷 {title}\n🔥 متاح الآن للمشاهدة:\n{link}"
+                
+                # الإرسال
+                for u in users:
+                    send_image_message(u['phone'], img_url, msg)
+                
+                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                            (title, datetime.now().strftime("%H:%M")))
+                conn.commit()
+        
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ: {e}")
+        print(f"DEBUG: خطأ في فحص الـ Feed: {e}")
 
 def loop():
     while True:
