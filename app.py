@@ -19,26 +19,18 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
-def send_template_message(phone, image_url, title):
+# دالة إرسال الصورة (جديدة)
+def send_image_message(phone, image_url, caption):
     try:
-        url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone,
-            "type": "template",
-            "template": {
-                "name": "new_media_update",
-                "language": {"code": "ar"},
-                "components": [
-                    {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]},
-                    {"type": "body", "parameters": [{"type": "text", "text": title}]}
-                ]
-            }
-        }
-        requests.post(url, json=payload, headers=headers)
-    except Exception:
-        pass
+        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
+                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
+                      json={
+                          "messaging_product": "whatsapp",
+                          "to": phone,
+                          "type": "image",
+                          "image": {"link": image_url, "caption": caption}
+                      })
+    except: pass
 
 def check_updates():
     from bs4 import BeautifulSoup
