@@ -50,23 +50,46 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-        res = requests.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=20)
+        # إضافة headers كاملة تحاكي متصفحاً حقيقياً
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://m.asd.ink/category/turkish-series-2/",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1"
+        }
         
-        # طباعة جزء من الـ HTML لنرى ما الذي يراه السيرفر فعلياً
-        print(f"DEBUG: طول الصفحة المحملة: {len(res.text)}")
+        # استخدام Session للحفاظ على ملفات تعريف الارتباط
+        session = requests.Session()
+        res = session.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=20)
         
-        # البحث عن أي روابط تنتهي بـ .html أو تحتوي على /series/
+        # البحث عن العناصر بناءً على التنسيق الذي نراه في الصورة (البطاقات)
+        # الصورة تُظهر أن كل مسلسل داخل div يحتوي على معلومات الحلقة والعنوان
         soup = BeautifulSoup(res.text, 'html.parser')
-        links = soup.select('a[href*="series"]') # البحث عن أي رابط يحتوي كلمة series
         
-        print(f"DEBUG: وجدنا {len(links)} رابط يحتوي على كلمة series")
+        # البطاقات في هذا الموقع غالباً ما تكون داخل div بكلاس يبدأ بـ 'col-'
+        cards = soup.select('div[class*="col-"]')
         
-        for link in links[:5]: # طباعة أول 5 روابط لنعرف شكلها
-            print(f"DEBUG: الرابط: {link.get('href')} النص: {link.text.strip()}")
+        print(f"DEBUG: تم العثور على {len(cards)} عنصر. المحاولة الآن لاستخراج البيانات...")
+
+        for card in cards:
+            # نحاول استخراج العنوان (عادة يكون في h2 أو النص المباشر)
+            # ونحاول استخراج الصورة (data-src أو src)
+            img = card.find('img')
+            title_tag = card.find('a') # غالباً العنوان داخل الرابط
             
+            if img and title_tag:
+                title = title_tag.get('title') or title_tag.text.strip()
+                img_url = img.get('data-src') or img.get('src')
+                
+                if title and img_url:
+                    print(f"✅ نجاح! تم العثور على: {title}")
+                    # هنا كود الإرسال الخاص بك...
+                    return # نكتفي بأول مسلسل لضمان استقرار السيرفر
+                    
     except Exception as e:
-        print(f"DEBUG: خطأ: {e}")
+        print(f"DEBUG: خطأ فادح: {e}")
 
 def loop():
     while True:
