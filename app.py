@@ -1,7 +1,5 @@
 from flask import Flask, request, jsonify, render_template
-import os, threading, time, requests, psycopg2, cloudscraper
 from psycopg2.extras import RealDictCursor
-from bs4 import BeautifulSoup
 from datetime import datetime
 
 app = Flask(__name__)
@@ -40,6 +38,9 @@ def send_template_message(phone, image_url, title):
         requests.post(url, json=payload, headers=headers)
     except Exception:
         pass
+
+from bs4 import BeautifulSoup
+import os, threading, time, requests, psycopg2, cloudscraper
 
 def check_updates():
     try:
