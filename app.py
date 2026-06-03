@@ -66,12 +66,6 @@ def check_updates():
         cur.close(); conn.close()
     except Exception as e: print(f"Error: {e}")
 
-def loop():
-    while True:
-        try: check_updates()
-        except: pass
-        time.sleep(600)
-
 @app.route("/")
 def home(): return render_template("chat.html")
 
@@ -146,5 +140,4 @@ def webhook():
 
 if __name__ == "__main__":
     init_db()
-    threading.Thread(target=loop, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
