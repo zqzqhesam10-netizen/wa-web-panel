@@ -47,9 +47,6 @@ def send_image_message(phone, image_url, caption):
                           "image": {"link": image_url, "caption": caption}
                       })
     except: pass
-        
-import cloudscraper
-import re
 
 def check_updates():
     try:
@@ -64,32 +61,35 @@ def check_updates():
 
         # 1. كلمات البحث
         keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
+        # 2. كلمات استبعاد
         exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
-        for link in soup.find_all('a', href=True):
+        # نأخذ كافة الروابط ونعكسها لنبدأ من الأقدم للأحدث
+        links = list(soup.find_all('a', href=True))
+        for link in reversed(links):
             title = link.get('title') or link.text.strip()
             
-            # فلترة ذكية: يجب أن يحتوي على كلمة بحث، ولا يحتوي على كلمة استبعاد، ويجب أن يحتوي على رقم (دلالة حلقة)
+            # فلترة ذكية
             if title and any(k in title for k in keywords):
                 if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
-                    img_tag = link.find('img') or link.find_previous('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    
-                    # التحقق من عدم التكرار في قاعدة البيانات
+                    # التحقق من عدم التكرار
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
                         print(f"✅ تم العثور على محتوى جديد: {title}")
+                        
+                        img_tag = link.find('img') or link.find_previous('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
                         msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                         
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
+                        # إضافة للسجل وعدم استخدام break ليتمكن من إكمال الفحص
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
-                        break 
+                        
         cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الدمج: {e}")
