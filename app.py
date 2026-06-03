@@ -45,37 +45,39 @@ def check_updates():
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # 1. كلمات البحث
         keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
         exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
+        # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
         for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
+            link_url = link.get('href') # استخدام الرابط كمعرف فريد
             
-            # فلترة ذكية: يجب أن يحتوي على كلمة بحث، ولا يحتوي على كلمة استبعاد، ويجب أن يحتوي على رقم (دلالة حلقة)
             if title and any(k in title for k in keywords):
                 if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
-                    img_tag = link.find('img') or link.find_previous('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                    # التحقق من الرابط في قاعدة البيانات (أكثر دقة من العنوان)
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
                     
-                    # التحقق من عدم التكرار في قاعدة البيانات
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        print(f"✅ تم العثور على محتوى جديد: {title}")
+                        print(f"✅ محتوى جديد سيتم إرساله: {title}")
+                        img_tag = link.find('img') or link.find_previous('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
                         msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                         
+                        # الإرسال للمستخدمين
                         for u in users:
+                            # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
                             send_image_message(u['phone'], img_url, msg)
                         
+                        # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
+                                    (link_url, datetime.now().strftime("%H:%M")))
                         conn.commit()
-                        break 
+                        
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الدمج: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
