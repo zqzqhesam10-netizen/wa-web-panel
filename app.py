@@ -58,44 +58,36 @@ def check_updates():
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        url = "https://www.fasel-hd.cam/most_recent"
-        res = scraper.get(url, timeout=20)
+        res = scraper.get("https://www.fasel-hd.cam/most_recent", timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # 1. كلمات البحث
-        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        # 2. كلمات استبعاد
-        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
-
-        # نأخذ كافة الروابط ونعكسها لنبدأ من الأقدم للأحدث
-        links = list(soup.find_all('a', href=True))
+        
+        links = list(soup.select('.post-title a'))
+        # نعكس القائمة لنبدأ من الأقدم للأحدث ونضمن الترتيب
         for link in reversed(links):
-            title = link.get('title') or link.text.strip()
+            # تنظيف العنوان من المسافات الزائدة
+            raw_title = link.get('title') or link.text.strip()
+            title = " ".join(raw_title.split())
             
-            # فلترة ذكية
-            if title and any(k in title for k in keywords):
-                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
+            if title and any(k in title for k in ["مسلسل", "انمي", "فيلم"]):
+                # التحقق من وجود العنوان في قاعدة البيانات
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                if not cur.fetchone():
+                    # حفظ في قاعدة البيانات فوراً (لحجز العنوان)
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                (title, datetime.now().strftime("%H:%M")))
+                    conn.commit()
                     
-                    # التحقق من عدم التكرار
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                    if not cur.fetchone():
-                        print(f"✅ تم العثور على محتوى جديد: {title}")
-                        
-                        img_tag = link.find('img') or link.find_previous('img')
-                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                        
-                        for u in users:
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        # إضافة للسجل وعدم استخدام break ليتمكن من إكمال الفحص
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        
+                    # الإرسال بعد الحفظ لضمان عدم التكرار في حال حدوث خطأ
+                    img_tag = link.find('img') or link.find_previous('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                    
+                    for u in users:
+                        send_image_message(u['phone'], img_url, msg)
+        
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الدمج: {e}")
+        print(f"Error: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
