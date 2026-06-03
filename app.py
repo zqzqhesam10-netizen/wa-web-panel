@@ -107,10 +107,13 @@ def add_user():
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
-@app.route("/api/force_check", methods=["GET", "POST"])
+import subprocess
+
+@app.route("/api/force_check", methods=["POST"])
 def force_check():
-    check_updates()
-    return jsonify({"status": "تم الفحص بنجاح"})
+    # تشغيل الفحص كعملية مستقلة تماماً لا تؤثر على السيرفر
+    subprocess.Popen(["python3", "-c", "from app import check_updates; check_updates()"])
+    return jsonify({"status": "Started as background process"})
 
 @app.route("/api/test_send")
 def test_send():
