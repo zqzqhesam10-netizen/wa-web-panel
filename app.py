@@ -165,8 +165,8 @@ def force_check():
     check_updates()
     return jsonify({"status": "تم الفحص بنجاح"})
     
-    @app.route("/api/test_send")
-def test_send():
+@app.route("/api/test_send")
+ def test_send():
     try:
         # استبدل الرقم برقمك الحقيقي مع رمز الدولة بدون +
         send_image_message("967779255780", "https://i.imgur.com/example.jpg", "تجربة إرسال تجريبية من السيرفر")
