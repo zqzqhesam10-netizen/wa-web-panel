@@ -48,23 +48,51 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
+import cloudscraper
+
 def check_updates():
     try:
-        # رابط نسخة جوجل المخبأة للموقع (أسرع وأضمن ولا يمكن حظره)
-        url = "https://webcache.googleusercontent.com/search?q=cache:https://m.asd.ink/category/turkish-series-2/"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        res = requests.get(url, headers=headers, timeout=20)
+        # استخدام cloudscraper لتجاوز الحماية
+        scraper = cloudscraper.create_scraper()
+        url = "https://www.fasel-hd.cam/most_recent"
+        res = scraper.get(url, timeout=20)
         
-        # البحث عن نصوص المسلسلات في نسخة جوجل
-        if "مسلسلات" in res.text:
-            print("DEBUG: تم الوصول لنسخة جوجل بنجاح!")
-            # هنا يمكنك استخدام soup لاستخراج العناوين
-        else:
-            print("DEBUG: نسخة جوجل لا تحتوي على محتوى أو تم حظرها أيضاً.")
+        soup = BeautifulSoup(res.text, 'html.parser')
+
+        # الكلمات المفتاحية للبحث
+        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+
+        for link in soup.find_all('a', href=True):
+            title = link.get('title') or link.text.strip()
             
+            # التحقق من وجود أي من الكلمات المفتاحية
+            if title and any(word in title for word in keywords):
+                
+                # البحث عن الصورة (بناءً على بنية موقع فاصول)
+                img_tag = link.find('img') or link.find_previous('img')
+                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else None
+                
+                if img_url and not img_url.endswith('.gif'):
+                    # التحقق من عدم التكرار
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                    if not cur.fetchone():
+                        print(f"DEBUG: تم العثور على: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        
+                        for u in users:
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (title, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        break 
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الوصول لنسخة جوجل: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
         
 def loop():
     while True:
