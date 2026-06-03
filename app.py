@@ -48,48 +48,40 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
         
+import cloudscraper
+
 def check_updates():
     try:
-        # إضافة headers كاملة تحاكي متصفحاً حقيقياً
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://m.asd.ink/category/turkish-series-2/",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1"
-        }
+        # إنشاء scraper يتجاوز الحماية
+        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True})
         
-        # استخدام Session للحفاظ على ملفات تعريف الارتباط
-        session = requests.Session()
-        res = session.get("https://m.asd.ink/category/turkish-series-2/", headers=headers, timeout=20)
+        url = "https://m.asd.ink/category/turkish-series-2/"
+        res = scraper.get(url, timeout=20)
         
-        # البحث عن العناصر بناءً على التنسيق الذي نراه في الصورة (البطاقات)
-        # الصورة تُظهر أن كل مسلسل داخل div يحتوي على معلومات الحلقة والعنوان
+        print(f"DEBUG: طول الصفحة مع scraper: {len(res.text)}")
+        
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # البطاقات في هذا الموقع غالباً ما تكون داخل div بكلاس يبدأ بـ 'col-'
-        cards = soup.select('div[class*="col-"]')
+        # البحث عن البطاقات (تم تجربة col-6، جرب الآن البحث العام)
+        # هذا المحدد سيجد أي div يحتوي على روابط للمسلسلات
+        items = soup.find_all('a', href=True)
         
-        print(f"DEBUG: تم العثور على {len(cards)} عنصر. المحاولة الآن لاستخراج البيانات...")
-
-        for card in cards:
-            # نحاول استخراج العنوان (عادة يكون في h2 أو النص المباشر)
-            # ونحاول استخراج الصورة (data-src أو src)
-            img = card.find('img')
-            title_tag = card.find('a') # غالباً العنوان داخل الرابط
+        found = False
+        for link in items:
+            # فلتر: أي رابط يحتوي على "series" أو "turkish"
+            if "turkish" in link['href'] or "series" in link['href']:
+                title = link.get('title') or link.text.strip()
+                if len(title) > 5:
+                    print(f"✅ تم العثور على: {title}")
+                    found = True
+                    # هنا تضع كود الإرسال الخاص بك...
+                    break
+        
+        if not found:
+            print("DEBUG: لم يتم العثور على روابط مسلسلات بالفلتر الحالي")
             
-            if img and title_tag:
-                title = title_tag.get('title') or title_tag.text.strip()
-                img_url = img.get('data-src') or img.get('src')
-                
-                if title and img_url:
-                    print(f"✅ نجاح! تم العثور على: {title}")
-                    # هنا كود الإرسال الخاص بك...
-                    return # نكتفي بأول مسلسل لضمان استقرار السيرفر
-                    
     except Exception as e:
-        print(f"DEBUG: خطأ فادح: {e}")
+        print(f"DEBUG: خطأ: {e}")
 
 def loop():
     while True:
