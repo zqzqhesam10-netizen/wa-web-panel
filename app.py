@@ -81,7 +81,7 @@ def check_updates():
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
                         print(f"✅ تم العثور على محتوى جديد: {title}")
-                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                         
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
