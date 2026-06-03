@@ -62,43 +62,37 @@ def check_updates():
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
+        # 1. كلمات البحث
         keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+        # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
         exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
-        # نأخذ كافة الروابط ونعكسها لنبدأ من الأقدم للأحدث (اختياري)
-        links = list(soup.find_all('a', href=True))
-        
-        for link in reversed(links):
-            # 1. تنظيف العنوان: إزالة المسافات الزائدة وجعل النص موحداً
-            raw_title = link.get('title') or link.text.strip()
-            title = " ".join(raw_title.split())
+        for link in soup.find_all('a', href=True):
+            title = link.get('title') or link.text.strip()
             
+            # فلترة ذكية: يجب أن يحتوي على كلمة بحث، ولا يحتوي على كلمة استبعاد، ويجب أن يحتوي على رقم (دلالة حلقة)
             if title and any(k in title for k in keywords):
                 if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
-                    # 2. التحقق من عدم التكرار باستخدام العنوان المنظف
+                    img_tag = link.find('img') or link.find_previous('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                    
+                    # التحقق من عدم التكرار في قاعدة البيانات
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        
-                        # 3. حفظ العنوان في قاعدة البيانات فوراً (لحجز العنوان ومنع أي تكرار متداخل)
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (title, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        
-                        # 4. ثم الإرسال
-                        img_tag = link.find('img') or link.find_previous('img')
-                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                        print(f"✅ تم العثور على محتوى جديد: {title}")
                         msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                         
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
-                        # نخرج بعد إرسال حلقة واحدة لضمان عدم إغراق واتساب
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (title, datetime.now().strftime("%H:%M")))
+                        conn.commit()
                         break 
-        
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ في الدمج: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
