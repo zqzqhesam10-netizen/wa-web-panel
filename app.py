@@ -35,32 +35,20 @@ def send_message(phone, message):
                       json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
     except: pass
 
-def send_template_message(phone, image_url, title):
-    # تأكد من استخدام v20.0 للوصول لأحدث الميزات
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": phone,
-        "type": "template",
-        "template": {
-            "name": "new_media_update",  # اسم القالب الذي ستنشئه في لوحة تحكم فيسبوك
-            "language": {"code": "ar"},
-            "components": [
-                {
-                    "type": "header",
-                    "parameters": [{"type": "image", "image": {"link": image_url}}]
-                },
-                {
-                    "type": "body",
-                    "parameters": [{"type": "text", "text": title}]
-                }
-            ]
-        }
-    }
-    requests.post(url, json=payload, headers=headers)
-    
-    except: pass
+# دالة إرسال الصورة (جديدة)
+def send_image_message(phone, image_url, caption):
+    try:
+        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
+                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
+                      json={
+                          "messaging_product": "whatsapp",
+                          "to": phone,
+                          "type": "image",
+                          "image": {"link": image_url, "caption": caption}
+                      })
+    except Exception as e:
+        print(f"Error sending image: {e}")
+        pass
         
 import cloudscraper
 import re
@@ -71,38 +59,35 @@ def check_updates():
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        # إضافة Headers لمحاكاة تصفح بشري وتجنب الحظر
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            "Referer": "https://www.google.com/",
-            "Accept-Language": "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7"
-        }
-        
         scraper = cloudscraper.create_scraper()
         url = "https://www.fasel-hd.cam/most_recent"
-        res = scraper.get(url, headers=headers, timeout=25)
+        res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
         keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
         exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
-        for link in soup.find_all('a', href=True):
+        # نأخذ كافة الروابط ونعكسها لنبدأ من الأقدم للأحدث (اختياري)
+        links = list(soup.find_all('a', href=True))
+        
+        for link in reversed(links):
+            # 1. تنظيف العنوان: إزالة المسافات الزائدة وجعل النص موحداً
             raw_title = link.get('title') or link.text.strip()
-            # تنظيف العنوان: توحيد المسافات لمنع التكرار بسبب المسافات الزائدة
             title = " ".join(raw_title.split())
             
             if title and any(k in title for k in keywords):
                 if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
-                    # التحقق من عدم التكرار بالعنوان "المنظف"
+                    # 2. التحقق من عدم التكرار باستخدام العنوان المنظف
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
                         
-                        # الحفظ فوراً قبل الإرسال (لحجز العنوان في قاعدة البيانات)
+                        # 3. حفظ العنوان في قاعدة البيانات فوراً (لحجز العنوان ومنع أي تكرار متداخل)
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
                         
+                        # 4. ثم الإرسال
                         img_tag = link.find('img') or link.find_previous('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
                         msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
@@ -110,12 +95,12 @@ def check_updates():
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
-                        # التوقف عند إرسال حلقة واحدة فقط
+                        # نخرج بعد إرسال حلقة واحدة لضمان عدم إغراق واتساب
                         break 
         
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في التحديث: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
