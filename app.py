@@ -60,7 +60,7 @@ def check_updates():
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        url = "https://www.fasel-hd.cam/most_recent"
+        url = "https://www.fasel-hd.cam/most_reالcent"
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
@@ -115,6 +115,80 @@ def loop():
         # الفحص كل 15 دقيقة (900 ثانية)
         time.sleep(60)
         
+from flask import Flask, request, jsonify, render_template
+import os, threading, time, requests, psycopg2, cloudscraper
+from psycopg2.extras import RealDictCursor
+from bs4 import BeautifulSoup
+from datetime import datetime
+
+app = Flask(__name__)
+
+# إعداداتك
+ACCESS_TOKEN = "EAASpVwBgGpABRpjv02OZAli1ypyLaetqfucvpZCfGa5iFw20N36oHhZCuJaOYZAQvBkSzyYeYaG7wo6t2i7Anm8lPUzqnEwQOtZAAeTLj3hUlxu0flt2D1KOfEgBfW52qcObwWWxRPsG2q4z064shcTjfOAVa4bg4rw2caZAK61vXiCN3EZApnZCaBZBRW1dANEtZBVQZDZD"
+PHONE_NUMBER_ID = "1171944939327803"
+VERIFY_TOKEN = "mytoken123"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def db(): return psycopg2.connect(DATABASE_URL)
+
+def init_db():
+    conn = db(); cur = conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS users (phone TEXT PRIMARY KEY);")
+    cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
+    conn.commit(); cur.close(); conn.close()
+
+# دالة إرسال القالب الرسمية (ضرورية للإشعارات التلقائية)
+def send_template_message(phone, image_url, title):
+    try:
+        url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone,
+            "type": "template",
+            "template": {
+                "name": "new_media_update",
+                "language": {"code": "ar"},
+                "components": [
+                    {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]},
+                    {"type": "body", "parameters": [{"type": "text", "text": title}]}
+                ]
+            }
+        }
+        requests.post(url, json=payload, headers=headers)
+    except: pass
+
+def check_updates():
+    try:
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
+        scraper = cloudscraper.create_scraper()
+        res = scraper.get("https://www.fasel-hd.cam/most_recent", timeout=20)
+        soup = BeautifulSoup(res.text, 'html.parser')
+
+        for link in soup.find_all('a', href=True):
+            title = " ".join((link.get('title') or link.text.strip()).split())
+            link_href = link.get('href')
+            if title and any(char.isdigit() for char in title):
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_href,))
+                if not cur.fetchone():
+                    img_tag = link.find('img') or link.find_previous('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') or "https://i.imgur.com/example.jpg"
+                    for u in users:
+                        send_template_message(u['phone'], img_url, title)
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", (link_href, datetime.now().strftime("%H:%M")))
+                    conn.commit()
+                    break 
+        cur.close(); conn.close()
+    except Exception as e: print(f"Error: {e}")
+
+def loop():
+    while True:
+        try: check_updates()
+        except: pass
+        time.sleep(600)
+
 @app.route("/")
 def home(): return render_template("chat.html")
 
@@ -139,7 +213,8 @@ def get_messages(phone):
 @app.route("/send", methods=["POST"])
 def send():
     phone, message = request.form.get("phone"), request.form.get("message")
-    send_message(phone, message)
+    # تم تحديث الإرسال هنا
+    requests.post(f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages", headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}, json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
     conn = db(); cur = conn.cursor()
     cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES(%s,%s,'me',%s)", (phone, message, datetime.now().strftime("%H:%M")))
     conn.commit(); cur.close(); conn.close()
@@ -149,13 +224,9 @@ def send():
 def add_user():
     phone = request.form.get("phone")
     if phone:
-        # تأكد من أن دالة الاتصال بقاعدة البيانات لديك تسمى db()
-        conn = db() 
-        cur = conn.cursor()
+        conn = db(); cur = conn.cursor()
         cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
-        conn.commit()
-        cur.close()
-        conn.close()
+        conn.commit(); cur.close(); conn.close()
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
@@ -163,35 +234,26 @@ def add_user():
 def force_check():
     check_updates()
     return jsonify({"status": "تم الفحص بنجاح"})
-    
+
 @app.route("/api/test_send")
 def test_send():
-    try:
-        # استبدل الرقم برقمك الحقيقي مع رمز الدولة بدون +
-        send_image_message("967779255780", "https://i.imgur.com/example.jpg", "تجربة إرسال تجريبية من السيرفر")
-        return "تم إرسال طلب الإرسال إلى واتساب!"
-    except Exception as e:
-        return f"خطأ: {e}"
+    send_template_message("967779255780", "https://i.imgur.com/example.jpg", "تجربة إرسال تجريبية")
+    return "تم الإرسال"
 
 @app.route("/api/clear_messages", methods=["GET"])
 def clear_messages():
-    try:
-        conn = db(); cur = conn.cursor()
-        cur.execute("DELETE FROM messages;") 
-        conn.commit(); cur.close(); conn.close()
-        return "<h1>✅ تم حذف جميع الرسائل من قاعدة البيانات بنجاح!</h1><p>الآن البوت سيعتبر كل شيء جديداً وسيرسل التحديثات فوراً.</p>"
-    except Exception as e:
-        return f"<h1>❌ حدث خطأ: {e}</h1>"
+    conn = db(); cur = conn.cursor()
+    cur.execute("DELETE FROM messages;"); conn.commit(); cur.close(); conn.close()
+    return "تم الحذف"
 
 @app.route("/webhook", methods=["GET", "POST"])
-
 def webhook():
     if request.method == "GET": return request.args.get("hub.challenge") if request.args.get("hub.verify_token") == VERIFY_TOKEN else "error", 403
     try:
         data = request.json
         if "messages" in data["entry"][0]["changes"][0]["value"]:
             msg = data["entry"][0]["changes"][0]["value"]["messages"][0]
-            phone, text = msg["from"], msg["text"]["body"]
+            phone, text = msg["from"], msg.get("text", {}).get("body", "")
             conn = db(); cur = conn.cursor()
             cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES(%s,%s,'them',%s)", (phone, text, datetime.now().strftime("%H:%M")))
             cur.execute("INSERT INTO users(phone) VALUES(%s) ON CONFLICT DO NOTHING", (phone,))
@@ -201,6 +263,5 @@ def webhook():
 
 if __name__ == "__main__":
     init_db()
-    # تشغيل الفحص في خيط منفصل لضمان عدم توقف السيرفر
     threading.Thread(target=loop, daemon=True).start()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
