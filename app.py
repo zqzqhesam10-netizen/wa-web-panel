@@ -56,47 +56,24 @@ def check_updates():
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
-        
         scraper = cloudscraper.create_scraper()
-        url = "https://www.fasel-hd.cam/most_recent"
-        res = scraper.get(url, timeout=20)
+        res = scraper.get("https://www.fasel-hd.cam/most_recent", timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # 1. كلمات البحث
-        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
-        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
-
-# نأخذ كل العناصر التي تظهر في الصفحة (الأحدث أولاً)
-        links = soup.select('.post-title a') # تأكد من الـ Selector المناسب لموقعك
         
-        # نعكس القائمة لنبدأ من الأقدم للأحدث (حتى يرسل بالترتيب الصحيح)
+        links = soup.select('.post-title a')
         for link in reversed(links):
             title = link.get('title') or link.text.strip()
-            
-            # فلترة
-            if title and any(k in title for k in keywords) and not any(e in title for e in exclude_words):
-                
-                # فحص هل هذا العنصر موجود في قاعدة البيانات
+            if title and any(k in title for k in ["مسلسل", "انمي", "فيلم"]):
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                 if not cur.fetchone():
-                    # إذا لم يكن موجوداً، فهو "جديد" ويجب إرساله
                     img_tag = link.find('img') or link.find_previous('img')
                     img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                    
-                    for u in users: 
-                        send_image_message(u['phone'], img_url, msg)
-                    
-                    # حفظ أنه تم الإرسال
-                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                (title, datetime.now().strftime("%H:%M")))
+                    msg = f"📺 {title}\n🔥 متاح الآن!"
+                    for u in users: send_image_message(u['phone'], img_url, msg)
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", (title, datetime.now().strftime("%H:%M")))
                     conn.commit()
-                    # لا نستخدم break هنا حتى يكمل إرسال كل العناصر الجديدة التي وجدها
-                        break 
         cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG: خطأ في الدمج: {e}")
+    except Exception as e: print(f"Error: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
