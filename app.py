@@ -166,10 +166,10 @@ def force_check():
     return jsonify({"status": "تم الفحص بنجاح"})
     
 @app.route("/api/test_send")
- def test_send():
+def test_send():
     try:
         # استبدل الرقم برقمك الحقيقي مع رمز الدولة بدون +
-        send_image_message("967779255780", "https://i.imgur.com/example.jpg", "تجربة إرسال تجريبية من السيرفر")
+        send_image_message("9677xxxxxxxx", "https://i.imgur.com/example.jpg", "تجربة إرسال تجريبية من السيرفر")
         return "تم إرسال طلب الإرسال إلى واتساب!"
     except Exception as e:
         return f"خطأ: {e}"
