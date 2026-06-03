@@ -21,26 +21,25 @@ def init_db():
     conn.commit(); cur.close(); conn.close()
 
 def send_template_message(phone, image_url, title):
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": phone,
-        "type": "template",
-        "template": {
-            "name": "new_media_update",
-            "language": {"code": "ar"},
-            "components": [
-                {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]},
-                {"type": "body", "parameters": [{"type": "text", "text": title}]}
-            ]
+    try:
+        url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone,
+            "type": "template",
+            "template": {
+                "name": "new_media_update",
+                "language": {"code": "ar"},
+                "components": [
+                    {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]},
+                    {"type": "body", "parameters": [{"type": "text", "text": title}]}
+                ]
+            }
         }
-    }
-    response = requests.post(url, json=payload, headers=headers)
-    # هذا السطر سيظهر لك سبب الرفض في الـ Logs الخاصة بـ Render
-    print(f"DEBUG: Meta API Response: {response.status_code} - {response.text}")
-        
-    except: pass
+        requests.post(url, json=payload, headers=headers)
+    except Exception:
+        pass
 
 def check_updates():
     try:
