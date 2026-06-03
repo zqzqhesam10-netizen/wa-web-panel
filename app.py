@@ -57,41 +57,43 @@ def check_updates():
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
+        # إضافة Headers لتبدو كمتصفح حقيقي
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
         scraper = cloudscraper.create_scraper()
-        res = scraper.get("https://www.fasel-hd.cam/most_recent", timeout=20)
+        # جربنا رابط مختلف، الرابط الرئيسي للموقع
+        res = scraper.get("https://www.fasel-hd.cam/", headers=headers, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        links = list(soup.select('.post-title a'))
+        # تغيير الـ Selector ليناسب الصفحة الرئيسية (غالباً العناوين داخل div class="post-title")
+        links = list(soup.select('div.post-title a')) 
         
-        # --- إضافة سجل تتبع ---
-        print(f"DEBUG: تم العثور على {len(links)} رابط في الصفحة.") 
+        print(f"DEBUG: تم العثور على {len(links)} رابط.") 
         
         for link in reversed(links):
             raw_title = link.get('title') or link.text.strip()
             title = " ".join(raw_title.split())
             
-            # فلترة
-            is_match = any(k in title for k in ["مسلسل", "انمي", "فيلم"])
-            has_digit = any(char.isdigit() for char in title)
-            
-            if is_match and has_digit:
+            # شرط فلترة بسيط للتجربة (بدون تعقيدات في البداية)
+            if title:
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                 if not cur.fetchone():
-                    # الحفظ والإرسال
                     cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                 (title, datetime.now().strftime("%H:%M")))
                     conn.commit()
                     
-                    img_tag = link.find('img') or link.find_previous('img')
+                    img_tag = link.find_previous('img')
                     img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                    for u in users: send_image_message(u['phone'], img_url, msg)
-            else:
-                # هذا السطر سيخبرنا في الـ Logs لماذا تم تجاهل العناوين
-                print(f"DEBUG: تم تجاهل العنوان: {title} (Match: {is_match}, Digit: {has_digit})")
+                    msg = f"📺 {title}\n🔥 متاح الآن!"
+                    
+                    for u in users:
+                        send_image_message(u['phone'], img_url, msg)
         
         cur.close(); conn.close()
-    except Exception as e: print(f"DEBUG: Error: {e}")
+    except Exception as e:
+        print(f"DEBUG: خطأ: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
