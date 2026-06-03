@@ -151,11 +151,10 @@ def add_user():
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
-@app.route("/api/force_check", methods=["POST"])
+@app.route("/api/force_check", methods=["GET", "POST"])
 def force_check():
-    # استدعاء دالة الفحص فوراً
     check_updates()
-    return jsonify({"status": "تم الفحص والإرسال بنجاح"})
+    return jsonify({"status": "تم الفحص بنجاح"})
 
 @app.route("/api/clear_messages", methods=["GET"])
 def clear_messages():
