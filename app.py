@@ -50,23 +50,21 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        # خدمة AllOrigins تقوم بفتح الموقع وتجاوز الحماية وتسليمنا النص
-        target_url = "https://m.asd.ink/category/turkish-series-2/"
-        proxy_url = f"https://api.allorigins.win/get?url={requests.utils.quote(target_url)}"
+        # رابط نسخة جوجل المخبأة للموقع (أسرع وأضمن ولا يمكن حظره)
+        url = "https://webcache.googleusercontent.com/search?q=cache:https://m.asd.ink/category/turkish-series-2/"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
         
-        res = requests.get(proxy_url, timeout=20)
-        data = res.json()
-        content = data.get('contents', '')
-
-        # الآن نقوم بالبحث في المحتوى الذي جلبه البروكسي
-        if "مسلسلات" in content:
-            print("DEBUG: تم الوصول للمحتوى بنجاح!")
-            # يمكنك هنا استخدام BeautifulSoup على متغير content
+        res = requests.get(url, headers=headers, timeout=20)
+        
+        # البحث عن نصوص المسلسلات في نسخة جوجل
+        if "مسلسلات" in res.text:
+            print("DEBUG: تم الوصول لنسخة جوجل بنجاح!")
+            # هنا يمكنك استخدام soup لاستخراج العناوين
         else:
-            print("DEBUG: البروكسي جلب المحتوى، لكن لم أجد كلمة 'مسلسلات'.")
+            print("DEBUG: نسخة جوجل لا تحتوي على محتوى أو تم حظرها أيضاً.")
             
     except Exception as e:
-        print(f"DEBUG: خطأ في استخدام البروكسي: {e}")
+        print(f"DEBUG: خطأ في الوصول لنسخة جوجل: {e}")
         
 def loop():
     while True:
