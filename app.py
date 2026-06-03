@@ -95,16 +95,18 @@ def check_updates():
         print(f"DEBUG: خطأ في الدمج: {e}")
         
 def loop():
-    # إضافة تأخير بسيط عند بدء التشغيل للسماح للسيرفر بالتحميل
+    print("DEBUG: Loop started...") # للتأكد في الـ Logs
     time.sleep(30) 
     while True:
         try:
+            print("DEBUG: Checking for updates...")
             check_updates()
         except Exception as e:
-            print(f"DEBUG: خطأ في الـ Loop التلقائي: {e}")
-        # الفحص كل 15 دقيقة (900 ثانية) بدلاً من دقيقة واحدة لتجنب الحظر
-        time.sleep(30)
-
+            print(f"DEBUG: Error in loop: {e}")
+        
+        # الفحص كل 15 دقيقة (900 ثانية)
+        time.sleep(60)
+        
 @app.route("/")
 def home(): return render_template("chat.html")
 
