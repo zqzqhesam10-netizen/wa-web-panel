@@ -47,6 +47,9 @@ def send_image_message(phone, image_url, caption):
                           "image": {"link": image_url, "caption": caption}
                       })
     except: pass
+        
+import cloudscraper
+import re
 
 def check_updates():
     try:
