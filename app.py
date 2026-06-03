@@ -57,7 +57,7 @@ def check_updates():
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        # إضافة headers قوية لمحاكاة متصفح Chrome محدث
+        # إضافة Headers لمحاكاة تصفح بشري وتجنب الحظر
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
             "Referer": "https://www.google.com/",
@@ -65,46 +65,43 @@ def check_updates():
         }
         
         scraper = cloudscraper.create_scraper()
-        # الرابط الأصلي الذي كان يعمل
         url = "https://www.fasel-hd.cam/most_recent"
         res = scraper.get(url, headers=headers, timeout=25)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # استخدام selector أكثر عمومية في حال تغيرت بنية الموقع
-        links = soup.find_all('a', href=True)
-        
-        found_count = 0
-        for link in links:
-            title = link.get('title') or link.text.strip()
+        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
+
+        for link in soup.find_all('a', href=True):
+            raw_title = link.get('title') or link.text.strip()
+            # تنظيف العنوان: توحيد المسافات لمنع التكرار بسبب المسافات الزائدة
+            title = " ".join(raw_title.split())
             
-            # فلترة أكثر مرونة
-            if title and any(k in title for k in ["مسلسل", "انمي", "فيلم"]):
-                if any(char.isdigit() for char in title):
+            if title and any(k in title for k in keywords):
+                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
-                    # تنظيف العنوان
-                    clean_title = " ".join(title.split())
-                    
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (clean_title,))
+                    # التحقق من عدم التكرار بالعنوان "المنظف"
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                     if not cur.fetchone():
-                        found_count += 1
                         
-                        # الحفظ قبل الإرسال
+                        # الحفظ فوراً قبل الإرسال (لحجز العنوان في قاعدة البيانات)
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (clean_title, datetime.now().strftime("%H:%M")))
+                                    (title, datetime.now().strftime("%H:%M")))
                         conn.commit()
                         
                         img_tag = link.find('img') or link.find_previous('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                         
                         for u in users:
-                            send_image_message(u['phone'], img_url, f"📺 {clean_title}\n🔥 متاح الآن!")
+                            send_image_message(u['phone'], img_url, msg)
                         
-                        break # إرسال أحدث حلقة فقط
+                        # التوقف عند إرسال حلقة واحدة فقط
+                        break 
         
-        print(f"DEBUG: تم فحص الموقع، تم العثور على {found_count} محتوى جديد.")
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG: خطأ في التحديث: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
