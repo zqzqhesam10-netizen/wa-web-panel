@@ -155,6 +155,16 @@ def force_check():
     check_updates()
     return jsonify({"status": "تم الفحص والإرسال بنجاح"})
 
+@app.route("/api/clear_messages", methods=["GET"])
+def clear_messages():
+    try:
+        conn = db(); cur = conn.cursor()
+        cur.execute("DELETE FROM messages;") 
+        conn.commit(); cur.close(); conn.close()
+        return "<h1>✅ تم حذف جميع الرسائل من قاعدة البيانات بنجاح!</h1><p>الآن البوت سيعتبر كل شيء جديداً وسيرسل التحديثات فوراً.</p>"
+    except Exception as e:
+        return f"<h1>❌ حدث خطأ: {e}</h1>"
+
 @app.route("/webhook", methods=["GET", "POST"])
 
 def webhook():
