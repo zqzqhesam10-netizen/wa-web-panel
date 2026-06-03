@@ -62,32 +62,36 @@ def check_updates():
         soup = BeautifulSoup(res.text, 'html.parser')
         
         links = list(soup.select('.post-title a'))
-        # نعكس القائمة لنبدأ من الأقدم للأحدث ونضمن الترتيب
+        
+        # --- إضافة سجل تتبع ---
+        print(f"DEBUG: تم العثور على {len(links)} رابط في الصفحة.") 
+        
         for link in reversed(links):
-            # تنظيف العنوان من المسافات الزائدة
             raw_title = link.get('title') or link.text.strip()
             title = " ".join(raw_title.split())
             
-            if title and any(k in title for k in ["مسلسل", "انمي", "فيلم"]):
-                # التحقق من وجود العنوان في قاعدة البيانات
+            # فلترة
+            is_match = any(k in title for k in ["مسلسل", "انمي", "فيلم"])
+            has_digit = any(char.isdigit() for char in title)
+            
+            if is_match and has_digit:
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
                 if not cur.fetchone():
-                    # حفظ في قاعدة البيانات فوراً (لحجز العنوان)
+                    # الحفظ والإرسال
                     cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                 (title, datetime.now().strftime("%H:%M")))
                     conn.commit()
                     
-                    # الإرسال بعد الحفظ لضمان عدم التكرار في حال حدوث خطأ
                     img_tag = link.find('img') or link.find_previous('img')
                     img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
                     msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                    
-                    for u in users:
-                        send_image_message(u['phone'], img_url, msg)
+                    for u in users: send_image_message(u['phone'], img_url, msg)
+            else:
+                # هذا السطر سيخبرنا في الـ Logs لماذا تم تجاهل العناوين
+                print(f"DEBUG: تم تجاهل العنوان: {title} (Match: {is_match}, Digit: {has_digit})")
         
         cur.close(); conn.close()
-    except Exception as e:
-        print(f"Error: {e}")
+    except Exception as e: print(f"DEBUG: Error: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
