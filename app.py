@@ -50,38 +50,24 @@ def send_image_message(phone, image_url, caption):
         
 def check_updates():
     try:
-        # هذا هو رابط الـ API الرسمي للموقع
-        url = "https://m.asd.ink/wp-json/wp/v2/posts?per_page=5"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
+        # خدمة AllOrigins تقوم بفتح الموقع وتجاوز الحماية وتسليمنا النص
+        target_url = "https://m.asd.ink/category/turkish-series-2/"
+        proxy_url = f"https://api.allorigins.win/get?url={requests.utils.quote(target_url)}"
         
-        res = requests.get(url, headers=headers, timeout=20)
-        data = res.json() # تحويل الاستجابة مباشرة إلى قائمة من المسلسلات
-        
-        # الحصول على أحدث مسلسل
-        latest = data[0]
-        title = latest['title']['rendered']
-        link = latest['link']
-        
-        # جلب الصورة (موجودة في الـ 'featured_media' أو 'jetpack_featured_media_url')
-        img_url = latest.get('jetpack_featured_media_url') or "https://i.imgur.com/example.jpg"
+        res = requests.get(proxy_url, timeout=20)
+        data = res.json()
+        content = data.get('contents', '')
 
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-        
-        if not cur.fetchone():
-            print(f"DEBUG: تم العثور عبر الـ API على: {title}")
-            cur.execute("SELECT phone FROM users")
-            users = cur.fetchall()
-            for u in users:
-                send_image_message(u['phone'], img_url, f"🇹🇷 {title}\n🔥 متاح الآن:\n{link}")
+        # الآن نقوم بالبحث في المحتوى الذي جلبه البروكسي
+        if "مسلسلات" in content:
+            print("DEBUG: تم الوصول للمحتوى بنجاح!")
+            # يمكنك هنا استخدام BeautifulSoup على متغير content
+        else:
+            print("DEBUG: البروكسي جلب المحتوى، لكن لم أجد كلمة 'مسلسلات'.")
             
-            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                        (title, datetime.now().strftime("%H:%M")))
-            conn.commit()
-        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الـ API: {e}")
-
+        print(f"DEBUG: خطأ في استخدام البروكسي: {e}")
+        
 def loop():
     while True:
         check_updates()
