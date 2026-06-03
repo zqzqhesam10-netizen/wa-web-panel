@@ -57,43 +57,42 @@ def check_updates():
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        # إضافة Headers لتبدو كمتصفح حقيقي
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        
         scraper = cloudscraper.create_scraper()
-        # جربنا رابط مختلف، الرابط الرئيسي للموقع
-        res = scraper.get("https://www.fasel-hd.cam/", headers=headers, timeout=20)
+        url = "https://www.fasel-hd.cam/most_recent"
+        res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
-        
-        # تغيير الـ Selector ليناسب الصفحة الرئيسية (غالباً العناوين داخل div class="post-title")
-        links = list(soup.select('div.post-title a')) 
-        
-        print(f"DEBUG: تم العثور على {len(links)} رابط.") 
-        
-        for link in reversed(links):
-            raw_title = link.get('title') or link.text.strip()
-            title = " ".join(raw_title.split())
+
+        # 1. كلمات البحث
+        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+        # 2. كلمات استبعاد (لضمان عدم إرسال أقسام الموقع)
+        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
+
+        for link in soup.find_all('a', href=True):
+            title = link.get('title') or link.text.strip()
             
-            # شرط فلترة بسيط للتجربة (بدون تعقيدات في البداية)
-            if title:
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
-                if not cur.fetchone():
-                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                (title, datetime.now().strftime("%H:%M")))
-                    conn.commit()
+            # فلترة ذكية: يجب أن يحتوي على كلمة بحث، ولا يحتوي على كلمة استبعاد، ويجب أن يحتوي على رقم (دلالة حلقة)
+            if title and any(k in title for k in keywords):
+                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
-                    img_tag = link.find_previous('img')
+                    img_tag = link.find('img') or link.find_previous('img')
                     img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    msg = f"📺 {title}\n🔥 متاح الآن!"
                     
-                    for u in users:
-                        send_image_message(u['phone'], img_url, msg)
-        
+                    # التحقق من عدم التكرار في قاعدة البيانات
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (title,))
+                    if not cur.fetchone():
+                        print(f"✅ تم العثور على محتوى جديد: {title}")
+                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                        
+                        for u in users:
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (title, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        break 
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ: {e}")
+        print(f"DEBUG: خطأ في الدمج: {e}")
         
 def loop():
     print("DEBUG: Loop started...") # للتأكد في الـ Logs
