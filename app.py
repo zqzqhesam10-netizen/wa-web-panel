@@ -39,6 +39,8 @@ def send_template_message(phone, image_url, title):
             }
         }
         requests.post(url, json=payload, headers=headers)
+        print(f"DEBUG: Meta Response: {response.text}")
+        
     except: pass
 
 def check_updates():
