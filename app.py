@@ -37,31 +37,19 @@ def check_updates():
     import cloudscraper
     try:
         scraper = cloudscraper.create_scraper()
-        # الرابط الجديد
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=20)
-        
-        # طباعة حالة الاتصال
-        print(f"DEBUG: Status Code: {res.status_code}")
-        
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # في موقع tuktukhd، العناوين غالباً داخل روابط في عناصر معينة
-        # سنقوم بطباعة كافة الروابط الموجودة لاكتشاف الهيكل الصحيح
-        items = soup.select('.post-title a') # هذا CSS Selector افتراضي، قد نحتاج تغييره
         
-        if not items:
-            print("DEBUG: لم يتم العثور على عناصر .post-title a، ربما الموقع يحتاج محدد مختلف.")
-            # طباعة جزء من الـ HTML لنفهم هيكل الموقع
-            print(soup.prettify()[:1000]) 
-            return
-
-        print(f"DEBUG: تم العثور على {len(items)} عنصر.")
-
-        for item in items:
-            title = item.text.strip()
-            link_url = item.get('href')
-            print(f"DEBUG: وجدنا: {title} | الرابط: {link_url}")
+        # لنبحث عن أي روابط داخل عناصر قد تحتوي على الأفلام
+        # سأقوم بطباعة العناوين والروابط الموجودة في div.poster أو ما يشابهه
+        items = soup.find_all('a') 
+        
+        print(f"DEBUG: تم العثور على {len(items)} رابط في الصفحة.")
+        
+        # طباعة أول 20 رابط لاكتشاف هيكل الموقع
+        for i, item in enumerate(items[:20]):
+            print(f"DEBUG {i}: النص: {item.text.strip()} | الرابط: {item.get('href')}")
             
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
