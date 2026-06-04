@@ -41,20 +41,41 @@ def check_updates():
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # البحث عن العناصر التي تحتوي على روابط الأفلام (غالباً في كلاسات معينة)
-        # سنجرب البحث عن div أو a التي لها كلاسات تحتوي على كلمة post
-        items = soup.select('div.post-card a') # جرب هذا أو div.poster a
-        
-        if not items:
-            # إذا لم يجد شيئاً، فليطبع كل الروابط لنرى الهيكل
-            items = soup.find_all('a')
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        # جلب قائمة المستخدمين
+        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+        users = cur.fetchall()
+
+        # البحث عن العناصر - نركز على الروابط التي تحتوي على نصوص تشير لحلقة أو فيلم
+        for link in soup.find_all('a', href=True):
+            href = link.get('href')
+            title = link.get('title') or link.text.strip()
             
-        for item in items:
-            title = item.get('title') or item.text.strip()
-            link = item.get('href', '')
-            if title and len(title) > 5 and 'tuktukhd.com' in link:
-                print(f"DEBUG_FOUND: {title} | {link}")
+            # فلترة ذكية: تجاهل القوائم، التركيز على المحتوى (يحتوي على كلمة حلقة أو فيلم)
+            if any(x in title for x in ['حلقة', 'فيلم']) and 'tuktukhd.com' in href:
                 
+                # التحقق هل أرسلناه من قبل؟
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+                if not cur.fetchone():
+                    print(f"✅ إرسال محتوى جديد: {title}")
+                    
+                    # نحاول جلب صورة (إذا وجدت)
+                    img_tag = link.find('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                    msg = f"📺 {title}\n🔗 اضغط للمشاهدة: {href}"
+                    
+                    # الإرسال للمستخدمين
+                    for u in users:
+                        send_image_message(u['phone'], img_url, msg)
+                    
+                    # تسجيل الرابط لمنع التكرار
+                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                                (href, datetime.now().strftime("%H:%M")))
+                    conn.commit()
+                    # نكتفي بإرسال أحدث 3 عناصر فقط في كل فحص لمنع الضغط
+                    break 
+        
+        cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG_ERROR: {e}")
 
