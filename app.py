@@ -35,66 +35,62 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    # ... (نفس الاستيرادات السابقة) ...
-    
-    print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع...")
+    import requests, time, psycopg2
+    from psycopg2.extras import RealDictCursor
+    import cloudscraper
+    from bs4 import BeautifulSoup
+    from datetime import datetime
+
+    print("🕵️‍♂️ البوت: بدأ الفحص الشامل لجميع المستخدمين...")
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
+        if not users:
+            print("⚠️ لا يوجد مستخدمون مسجلون في قاعدة البيانات!")
+            return
+
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=20)
-        res.encoding = 'utf-8' 
+        res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
-
         links = soup.select('a')
-        
-        # عداد للتأكد من أننا فحصنا أول 10
-        processed_count = 0
-        found_existing = 0
 
+        processed = 0
         for link in links:
-            if processed_count >= 10: break # التوقف تماماً بعد فحص أول 10 روابط
+            if processed >= 10: break
             
             title = link.get('title') or link.text.strip()
             link_url = link.get('href', '')
             
-            # الفلترة الأساسية
             if not link_url.startswith("http") or "page" in link_url: continue
             if not (title and any(k in title for k in ["مسلسل", "حلقة", "فيلم"])): continue
             if not any(char.isdigit() for char in title): continue
             
-            processed_count += 1
-            
-            # التحقق من قاعدة البيانات
             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+            if cur.fetchone(): continue
             
-            if cur.fetchone():
-                found_existing += 1
-            else:
-                # إرسال جديد
-                print(f"✅ محتوى جديد: {title}")
-                img_tag = link.find('img') or link.find_previous('img')
-                img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                
-                for u in users:
-                    send_image_message(u['phone'], img_url, msg)
-                
-                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                            (link_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-                conn.commit()
-                time.sleep(2)
+            # محتوى جديد: إرسال للكل
+            img_tag = link.find('img') or link.find_previous('img')
+            img_url = img_tag.get('data-src') or img_tag.get('src') or "https://via.placeholder.com/600x400"
+            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+            
+            for u in users:
+                phone = str(u['phone']).strip()
+                # هنا نرسل لكل مستخدم وجدناه في القاعدة
+                print(f"📡 محاولة إرسال إلى: {phone}")
+                send_image_message(phone, img_url, msg)
+            
+            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                        (link_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            conn.commit()
+            processed += 1
+            time.sleep(2)
 
-        # إذا كانت كل الروابط الـ 10 موجودة مسبقاً، نغلق
-        if found_existing == 10:
-            print("🏁 البوت: أول 10 روابط موجودة بالفعل في القاعدة، لا توجد تحديثات.")
-        else:
-            print(f"🏁 انتهت المهمة. تم معالجة {processed_count} عنصر.")
-            
         cur.close(); conn.close()
+        print("🏁 تمت عملية الإرسال للجميع.")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
         
