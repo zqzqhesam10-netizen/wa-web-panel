@@ -88,9 +88,6 @@ def check_updates():
     except Exception as e: 
         print(f"⚠️ البوت: حدث خطأ أثناء الفحص: {e}")
 
-# استدعاء الدالة
-check_recent_links()
-
 @app.route("/")
 def home(): return render_template("chat.html")
 
