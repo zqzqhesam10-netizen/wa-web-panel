@@ -33,53 +33,49 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    from bs4 import BeautifulSoup
-    import cloudscraper
+    print("🕵️‍♂️ البوت: بدأت عملية البحث الشامل في الموقع...")
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        # الرابط الجديد
-        url = "https://tuktukhd.com/recent/"
-        res = scraper.get(url, timeout=20)
-        res.encoding = 'utf-8'
+        # تأكد من أن الرابط هو المطلوب
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
+        # البحث الشامل عن كل روابط الصفحة
+        links = soup.find_all('a', href=True)
+        print(f"🔍 البوت: عثرت على {len(links)} رابط، جاري الفلترة...")
 
-        # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
-        for link in soup.find_all('a', href=True):
+        for link in links:
             title = link.get('title') or link.text.strip()
-            link_url = link.get('href') # استخدام الرابط كمعرف فريد
+            link_url = link.get('href', '')
+            print(f"👀 فحص: '{title}' | الرابط: {link_url}")
             
-            if title and any(k in title for k in keywords):
-                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
+            # شرط الفلترة: يجب أن يحتوي العنوان على كلمات بحث، والرابط يجب أن يكون حلقة
+            if title and ("مسلسل" in title or "حلقة" in title):
+                if "/series/" in link_url or "/watch/" in link_url or "episode" in link_url:
                     
-                    # التحقق من الرابط في قاعدة البيانات (أكثر دقة من العنوان)
+                    # التحقق من قاعدة البيانات لمنع التكرار
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-                    
                     if not cur.fetchone():
-                        print(f"✅ محتوى جديد سيتم إرساله: {title}")
-                        img_tag = link.find('img') or link.find_previous('img')
-                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                        print(f"✅ البوت: وجدت محتوى جديد: {title}")
+                        msg = f"📺 {title}\n🔗 المشاهدة: {link_url}"
                         
-                        # الإرسال للمستخدمين
+                        # الإرسال لجميع المستخدمين
                         for u in users:
-                            # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
-                            send_image_message(u['phone'], img_url, msg)
+                            send_text_message(u['phone'], msg)
                         
-                        # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
+                        # تسجيل في قاعدة البيانات
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (link_url, datetime.now().strftime("%H:%M")))
                         conn.commit()
-                        
+        
         cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print("🏁 البوت: انتهت عملية الفحص بنجاح.")
+    except Exception as e: 
+        print(f"⚠️ البوت: حدث خطأ أثناء الفحص: {e}")
         
 @app.route("/")
 def home(): return render_template("chat.html")
