@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, render_template
-import os, requests, psycopg2, subprocess, sys
-from psycopg2.extras import RealDictCursor
+import os, sys
 from datetime import datetime
 
 app = Flask(__name__)
@@ -33,38 +32,46 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    from bs4 import BeautifulSoup
+    # استيراد ذكي داخل الدالة لمنع تحميل المكتبات إلا عند الحاجة
+    import requests
+    import time
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
     import cloudscraper
+    from bs4 import BeautifulSoup
+    
     print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع في موقع tuktukhd...")
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        # الاتصال بقاعدة البيانات
+        conn = db() 
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        # الرابط المخصص
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=20)
         res.encoding = 'utf-8' 
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # جلب الروابط (تأكد من تعديل الـ selector حسب هيكل الموقع)
-        # نحن نبحث عن الروابط التي تحتوي على محتوى
+        # جلب الروابط
         links = soup.select('a') 
-        
         count = 0
+        
         for link in links:
-            if count >= 10: break # التوقف بعد 10 إرسالات
+            if count >= 10: break
             
             title = link.get('title') or link.text.strip()
             link_url = link.get('href', '')
             
-            # فلترة: يجب أن يكون رابطاً صالحاً وليس رابط صفحة ترقيم
+            # فلترة الروابط العامة والترقيم
             if not link_url.startswith("http") or "page" in link_url:
                 continue
             
-            # شرط المحتوى: يجب أن يحتوي على كلمات دالة
+            # شرط المحتوى: المسلسلات والحلقات والأفلام (مع التأكد من وجود أرقام لضمان أنها حلقة)
             if title and any(k in title for k in ["مسلسل", "حلقة", "فيلم"]):
+                if not any(char.isdigit() for char in title): continue
+                if any(e in title for e in ["أحدث", "الأكثر", "تصنيف"]): continue
                 
                 # التحقق من قاعدة البيانات
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
@@ -72,26 +79,26 @@ def check_updates():
                 if not cur.fetchone():
                     print(f"✅ محتوى جديد سيتم إرساله: {title}")
                     
-                    # محاولة جلب الصورة
+                    # جلب الصورة
                     img_tag = link.find('img') or link.find_previous('img')
                     img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
                     
                     msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
                     
-                    # الإرسال للمستخدمين
+                    # الإرسال
                     for u in users:
                         send_image_message(u['phone'], img_url, msg)
                     
-                    # تسجيل في قاعدة البيانات
+                    # تسجيل
                     cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                 (link_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                     conn.commit()
                     
                     count += 1
-                    time.sleep(2) # تأخير لمنع الحظر
+                    time.sleep(2)
 
         cur.close(); conn.close()
-        print(f"🏁 البوت: انتهت عملية الفحص. تم إرسال {count} عنصر جديد.")
+        print(f"🏁 البوت: انتهت المهمة. تم معالجة {count} عنصر.")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
         
