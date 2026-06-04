@@ -1,9 +1,7 @@
 from flask import Flask, request, jsonify, render_template
-import os, requests, subprocess, sys, time, psycopg2 # استيراد المكتبة هنا
+import os, requests, psycopg2, subprocess, sys
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
-import cloudscraper
-from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
@@ -35,65 +33,52 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    import requests, time, psycopg2
-    from psycopg2.extras import RealDictCursor
-    import cloudscraper
     from bs4 import BeautifulSoup
-    from datetime import datetime
-
-    print("🕵️‍♂️ البوت: بدأ الفحص الشامل لجميع المستخدمين...")
+    import cloudscraper
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
-        if not users:
-            print("⚠️ لا يوجد مستخدمون مسجلون في قاعدة البيانات!")
-            return
-
         scraper = cloudscraper.create_scraper()
-        url = "https://tuktukhd.com/recent/"
+        url = "https://www.fasel-hd.cam/most_recent"
         res = scraper.get(url, timeout=20)
-        res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
-        links = soup.select('a')
 
-        processed = 0
-        for link in links:
-            if processed >= 10: break
-            
+        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
+
+        # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
+        for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
-            link_url = link.get('href', '')
+            link_url = link.get('href') # استخدام الرابط كمعرف فريد
             
-            if not link_url.startswith("http") or "page" in link_url: continue
-            if not (title and any(k in title for k in ["مسلسل", "حلقة", "فيلم"])): continue
-            if not any(char.isdigit() for char in title): continue
-            
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-            if cur.fetchone(): continue
-            
-            # محتوى جديد: إرسال للكل
-            img_tag = link.find('img') or link.find_previous('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') or "https://via.placeholder.com/600x400"
-            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-            
-            for u in users:
-                phone = str(u['phone']).strip()
-                # هنا نرسل لكل مستخدم وجدناه في القاعدة
-                print(f"📡 محاولة إرسال إلى: {phone}")
-                send_image_message(phone, img_url, msg)
-            
-            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                        (link_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-            conn.commit()
-            processed += 1
-            time.sleep(2)
-
+            if title and any(k in title for k in keywords):
+                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
+                    
+                    # التحقق من الرابط في قاعدة البيانات (أكثر دقة من العنوان)
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                    
+                    if not cur.fetchone():
+                        print(f"✅ محتوى جديد سيتم إرساله: {title}")
+                        img_tag = link.find('img') or link.find_previous('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                        
+                        # الإرسال للمستخدمين
+                        for u in users:
+                            # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (link_url, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        
         cur.close(); conn.close()
-        print("🏁 تمت عملية الإرسال للجميع.")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
-        
+
 @app.route("/")
 def home(): return render_template("chat.html")
 
