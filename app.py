@@ -19,35 +19,17 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
-def send_template_message(phone, title, link_url):
+# دالة إرسال الصورة (جديدة)
+def send_image_message(phone, image_url, caption):
     try:
-        # لاحظ هنا نرسل القالب وليس رسالة نصية عادية
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone,
-            "type": "template",
-            "template": {
-                "name": "new_media_update",  # اسم القالب الذي أنشأته في ميتا
-                "language": {"code": "ar"},
-                "components": [
-                    {
-                        "type": "body",
-                        "parameters": [
-                            {"type": "text", "text": title},  # المتغير الأول في القالب
-                            {"type": "text", "text": link_url} # المتغير الثاني في القالب
-                        ]
-                    }
-                ]
-            }
-        }
-        requests.post(
-            f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages",
-            headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
-            json=payload
-        )
-    except Exception as e:
-        print(f"خطأ في إرسال القالب: {e}")
-        
+        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
+                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
+                      json={
+                          "messaging_product": "whatsapp",
+                          "to": phone,
+                          "type": "image",
+                          "image": {"link": image_url, "caption": caption}
+                      })
     except: pass
 
 def check_updates():
@@ -86,7 +68,7 @@ def check_updates():
                         # الإرسال للمستخدمين
                         for u in users:
                             # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
-                            send_template_message(u['phone'], title, link_url)
+                            send_image_message(u['phone'], img_url, msg)
                         
                         # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
