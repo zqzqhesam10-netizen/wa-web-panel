@@ -1,6 +1,9 @@
 from flask import Flask, request, jsonify, render_template
-import os, sys
+import os, requests, subprocess, sys, time, psycopg2 # استيراد المكتبة هنا
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
+import cloudscraper
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
@@ -32,18 +35,9 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    # استيراد المكتبات بشكل صريح ومباشر داخل الدالة
-    import requests
-    import time
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-    import cloudscraper
-    from bs4 import BeautifulSoup
-    
     print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع...")
-    
     try:
-        # استدعاء دالة db() التي عرفتها أنت في بداية الملف
+        # استخدام المتغيرات المعرفة في بداية الملف مباشرة
         conn = db() 
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
@@ -91,7 +85,7 @@ def check_updates():
                     time.sleep(2)
 
         cur.close(); conn.close()
-        print(f"🏁 انتهت المهمة. تم معالجة {count} عنصر.")
+        print(f"🏁 انتهت المهمة.")
         
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
