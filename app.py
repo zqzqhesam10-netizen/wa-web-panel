@@ -36,46 +36,33 @@ def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        
         scraper = cloudscraper.create_scraper()
-        url = "https://www.fasel-hd.cam/most_recent"
+        # الرابط الجديد
+        url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=20)
+        
+        # طباعة حالة الاتصال
+        print(f"DEBUG: Status Code: {res.status_code}")
+        
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
+        # في موقع tuktukhd، العناوين غالباً داخل روابط في عناصر معينة
+        # سنقوم بطباعة كافة الروابط الموجودة لاكتشاف الهيكل الصحيح
+        items = soup.select('.post-title a') # هذا CSS Selector افتراضي، قد نحتاج تغييره
+        
+        if not items:
+            print("DEBUG: لم يتم العثور على عناصر .post-title a، ربما الموقع يحتاج محدد مختلف.")
+            # طباعة جزء من الـ HTML لنفهم هيكل الموقع
+            print(soup.prettify()[:1000]) 
+            return
 
-        # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
-        for link in soup.find_all('a', href=True):
-            title = link.get('title') or link.text.strip()
-            link_url = link.get('href') # استخدام الرابط كمعرف فريد
+        print(f"DEBUG: تم العثور على {len(items)} عنصر.")
+
+        for item in items:
+            title = item.text.strip()
+            link_url = item.get('href')
+            print(f"DEBUG: وجدنا: {title} | الرابط: {link_url}")
             
-            if title and any(k in title for k in keywords):
-                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
-                    
-                    # التحقق من الرابط في قاعدة البيانات (أكثر دقة من العنوان)
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-                    
-                    if not cur.fetchone():
-                        print(f"✅ محتوى جديد سيتم إرساله: {title}")
-                        img_tag = link.find('img') or link.find_previous('img')
-                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                        
-                        # الإرسال للمستخدمين
-                        for u in users:
-                            # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (link_url, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        
-        cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
 
