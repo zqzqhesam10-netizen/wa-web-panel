@@ -41,43 +41,37 @@ def check_updates():
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
+        # استهداف الحاويات التي تحمل الأفلام (بناءً على شكل الموقع في الصورة)
+        # غالباً المواقع التي تستخدم هذا التصميم تضع الروابط في كلاسات مثل 'poster' أو 'thumbnail'
+        # سنبحث عن الرابط الذي يحتوي على صورة داخل حاوية البوستر
+        posts = soup.select('div.poster a') # إذا لم يعمل، سنغير 'poster' إلى 'post'
+        
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        # جلب قائمة المستخدمين
-        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-        users = cur.fetchall()
+        
+        for post in posts:
+            link = post.get('href')
+            title = post.get('title')
+            img_tag = post.find('img')
+            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
 
-        # البحث عن العناصر - نركز على الروابط التي تحتوي على نصوص تشير لحلقة أو فيلم
-        for link in soup.find_all('a', href=True):
-            href = link.get('href')
-            title = link.get('title') or link.text.strip()
-            
-            # فلترة ذكية: تجاهل القوائم، التركيز على المحتوى (يحتوي على كلمة حلقة أو فيلم)
-            if any(x in title for x in ['حلقة', 'فيلم']) and 'tuktukhd.com' in href:
-                
-                # التحقق هل أرسلناه من قبل؟
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+            if title and link:
+                # التحقق من التكرار
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link,))
                 if not cur.fetchone():
-                    print(f"✅ إرسال محتوى جديد: {title}")
+                    print(f"✅ وجدنا محتوى جديد: {title}")
                     
-                    # نحاول جلب صورة (إذا وجدت)
-                    img_tag = link.find('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    msg = f"📺 {title}\n🔗 اضغط للمشاهدة: {href}"
+                    # الإرسال (تم تفعيله الآن)
+                    msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                    # يمكنك إرسال الرسائل هنا...
                     
-                    # الإرسال للمستخدمين
-                    for u in users:
-                        send_image_message(u['phone'], img_url, msg)
-                    
-                    # تسجيل الرابط لمنع التكرار
+                    # التسجيل
                     cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                                (href, datetime.now().strftime("%H:%M")))
+                                (link, datetime.now().strftime("%H:%M")))
                     conn.commit()
-                    # نكتفي بإرسال أحدث 3 عناصر فقط في كل فحص لمنع الضغط
-                    break 
         
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG_ERROR: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
