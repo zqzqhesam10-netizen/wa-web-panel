@@ -42,52 +42,59 @@ def check_updates():
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        # إضافة headers لتجنب حظر الموقع
-        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
-        res.encoding = 'utf-8' # معالجة الترميز
+        # الرابط المخصص
+        url = "https://tuktukhd.com/recent/"
+        res = scraper.get(url, timeout=20)
+        res.encoding = 'utf-8' 
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # البحث الشامل
-        links = soup.find_all('a', href=True)
-        print(f"🔍 البوت: عثرت على {len(links)} رابط، جاري الفلترة...")
-
-        # أخذ أول 10 روابط فقط كما طلبت
+        # جلب الروابط (تأكد من تعديل الـ selector حسب هيكل الموقع)
+        # نحن نبحث عن الروابط التي تحتوي على محتوى
+        links = soup.select('a') 
+        
         count = 0
         for link in links:
-            if count >= 10: break # التوقف بعد الوصول لـ 10 روابط جديدة
+            if count >= 10: break # التوقف بعد 10 إرسالات
             
             title = link.get('title') or link.text.strip()
             link_url = link.get('href', '')
             
-            # فلترة الروابط العامة والترقيم
-            if not link_url.startswith("http"): continue
-            if "recent/page" in link_url: continue
+            # فلترة: يجب أن يكون رابطاً صالحاً وليس رابط صفحة ترقيم
+            if not link_url.startswith("http") or "page" in link_url:
+                continue
             
-            # شرط الفلترة للمحتوى
-            if title and ("مسلسل" in title or "حلقة" in title or "فيلم" in title):
+            # شرط المحتوى: يجب أن يحتوي على كلمات دالة
+            if title and any(k in title for k in ["مسلسل", "حلقة", "فيلم"]):
                 
                 # التحقق من قاعدة البيانات
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                
                 if not cur.fetchone():
-                    print(f"✅ البوت: وجدت محتوى جديد: {title}")
-                    msg = f"📺 {title}\n🔗 المشاهدة: {link_url}"
+                    print(f"✅ محتوى جديد سيتم إرساله: {title}")
                     
-                    # الإرسال لجميع المستخدمين
+                    # محاولة جلب الصورة
+                    img_tag = link.find('img') or link.find_previous('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                    
+                    msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                    
+                    # الإرسال للمستخدمين
                     for u in users:
-                        send_text_message(u['phone'], msg)
+                        send_image_message(u['phone'], img_url, msg)
                     
                     # تسجيل في قاعدة البيانات
                     cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                 (link_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                     conn.commit()
-                    count += 1 # زيادة العداد عند إيجاد رابط جديد
-                    time.sleep(2) # تهدئة السيرفر
+                    
+                    count += 1
+                    time.sleep(2) # تأخير لمنع الحظر
 
         cur.close(); conn.close()
-        print("🏁 البوت: انتهت عملية الفحص بنجاح.")
-    except Exception as e: 
-        print(f"⚠️ البوت: حدث خطأ أثناء الفحص: {e}")
-
+        print(f"🏁 البوت: انتهت عملية الفحص. تم إرسال {count} عنصر جديد.")
+    except Exception as e:
+        print(f"DEBUG: خطأ في الفحص: {e}")
+        
 @app.route("/")
 def home(): return render_template("chat.html")
 
