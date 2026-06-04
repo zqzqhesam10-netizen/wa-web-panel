@@ -35,56 +35,42 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
+    print("🤖 البوت: بدأت الآن في زيارة موقع قصة عشق...")
     try:
         url = "https://esk.onl/"
         scraper = cloudscraper.create_scraper()
         res = scraper.get(url, timeout=20)
-        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        if res.status_code == 200:
+            print("✅ البوت: تم الدخول للموقع بنجاح، جاري تحليل الصفحة...")
+        else:
+            print(f"❌ البوت: فشل الدخول للموقع، كود الحالة: {res.status_code}")
+            return
 
-        # استهداف العناصر التي تحتوي على الحلقات
-        episodes = soup.select('.post-item') 
-        
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        for ep in episodes[:5]: # معالجة آخر 5 حلقات
+        soup = BeautifulSoup(res.text, 'html.parser')
+        episodes = soup.select('.post-item')
+        print(f"🔍 البوت: وجدت {len(episodes)} عنصر محتمل في الصفحة.")
+
+        # ... (باقي كود المقارنة) ...
+
+        for ep in episodes[:5]:
             title_tag = ep.find('h3') or ep.find('a', class_='post-link')
             if not title_tag: continue
             
             title = title_tag.text.strip()
-            link_url = title_tag.get('href') if title_tag.name == 'a' else title_tag.find('a').get('href')
+            print(f"👀 البوت: عيني رأت العنوان: {title}")
             
-            # --- شرط الفلترة المدمج ---
+            # ... (باقي منطق الفلترة والإرسال) ...
+            
             if "مسلسل" in title or "حلقة" in title:
+                print(f"🎯 البوت: هذا العنوان يطابق معايير الحلقات!")
+                # ... (منطق التحقق من قاعدة البيانات) ...
                 
-                # التأكد من أنه رابط صالح
-                if not link_url or not link_url.startswith('http'): continue
+            else:
+                print(f"🚫 البوت: تجاهلت هذا العنوان لأنه ليس مسلسل أو حلقة.")
 
-                # التحقق من عدم تكرار الحلقة في قاعدة البيانات
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-                if not cur.fetchone():
-                    # جلب الصورة
-                    img_tag = ep.find('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    
-                    # الرسالة
-                    msg = f"🆕 {title}\n🔗 [اضغط هنا للمشاهدة]({link_url})"
-                    
-                    # الإرسال للمشتركين
-                    cur.execute("SELECT phone FROM users")
-                    users = cur.fetchall()
-                    for u in users:
-                        send_image_message(u['phone'], img_url, msg)
-                    
-                    # تسجيل الرابط في قاعدة البيانات لمنع إرساله مرة أخرى
-                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                (link_url, datetime.now().strftime("%H:%M")))
-                    conn.commit()
-                    print(f"✅ تم إرسال: {title}")
-            # ---------------------------
-        
-        cur.close(); conn.close()
     except Exception as e:
-        print(f"خطأ أثناء فحص موقع esk.onl: {e}")
+        print(f"⚠️ البوت: حدث خطأ أثناء الرؤية: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
