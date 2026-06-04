@@ -35,42 +35,49 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    print("🤖 البوت: بدأت الآن في زيارة موقع قصة عشق...")
     try:
-        url = "https://esk.onl/"
-        scraper = cloudscraper.create_scraper()
-        res = scraper.get(url, timeout=20)
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        if res.status_code == 200:
-            print("✅ البوت: تم الدخول للموقع بنجاح، جاري تحليل الصفحة...")
-        else:
-            print(f"❌ البوت: فشل الدخول للموقع، كود الحالة: {res.status_code}")
-            return
-
+        scraper = cloudscraper.create_scraper()
+        url = "https://www.fasel-hd.cam/most_recent"
+        res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
-        episodes = soup.select('.post-item')
-        print(f"🔍 البوت: وجدت {len(episodes)} عنصر محتمل في الصفحة.")
 
-        # ... (باقي كود المقارنة) ...
+        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
-        for ep in episodes[:5]:
-            title_tag = ep.find('h3') or ep.find('a', class_='post-link')
-            if not title_tag: continue
+        # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
+        for link in soup.find_all('a', href=True):
+            title = link.get('title') or link.text.strip()
+            link_url = link.get('href') # استخدام الرابط كمعرف فريد
             
-            title = title_tag.text.strip()
-            print(f"👀 البوت: عيني رأت العنوان: {title}")
-            
-            # ... (باقي منطق الفلترة والإرسال) ...
-            
-            if "مسلسل" in title or "حلقة" in title:
-                print(f"🎯 البوت: هذا العنوان يطابق معايير الحلقات!")
-                # ... (منطق التحقق من قاعدة البيانات) ...
-                
-            else:
-                print(f"🚫 البوت: تجاهلت هذا العنوان لأنه ليس مسلسل أو حلقة.")
-
+            if title and any(k in title for k in keywords):
+                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
+                    
+                    # التحقق من الرابط في قاعدة البيانات (أكثر دقة من العنوان)
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                    
+                    if not cur.fetchone():
+                        print(f"✅ محتوى جديد سيتم إرساله: {title}")
+                        img_tag = link.find('img') or link.find_previous('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                        
+                        # الإرسال للمستخدمين
+                        for u in users:
+                            # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (link_url, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"⚠️ البوت: حدث خطأ أثناء الرؤية: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
