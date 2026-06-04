@@ -33,7 +33,8 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    print("🕵️‍♂️ البوت: بدأت عملية البحث الشامل في الموقع...")
+    from bs4 import BeautifulSoup
+    import cloudscraper
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
