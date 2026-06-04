@@ -32,58 +32,61 @@ def send_image_message(phone, image_url, caption):
                       })
     except: pass
 
-import requests
-from bs4 import BeautifulSoup
-import time
-from datetime import datetime
-
-# دالة الفحص والإرسال المخصصة لـ recent
-def check_recent_links():
-    url = "https://tuktukhd.com/recent/"
+def check_updates():
+    from bs4 import BeautifulSoup
+    import cloudscraper
+    print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع في موقع tuktukhd...")
     try:
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-        soup = BeautifulSoup(response.content, 'html.parser')
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        # استخراج الروابط (يجب تعديل الكلاس أو التاج حسب هيكل الموقع)
-        # هذا مثال افتراضي بناءً على هيكل المواقع المشابهة
-        links_data = []
-        for post in soup.select('a'): # عدل هذا حسب كلاس العناوين في موقعك
-            title = post.get_text(strip=True)
-            link = post.get('href')
-            if link and "tuktukhd.com/" in link and "recent" not in link and len(title) > 5:
-                links_data.append({'title': title, 'url': link})
+        scraper = cloudscraper.create_scraper()
+        # إضافة headers لتجنب حظر الموقع
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        res.encoding = 'utf-8' # معالجة الترميز
+        soup = BeautifulSoup(res.text, 'html.parser')
 
-        # أخذ آخر 10 روابط فقط
-        recent_10 = links_data[:10]
-        
-        for item in recent_10:
-            title = item['title']
-            link_url = item['url']
+        # البحث الشامل
+        links = soup.find_all('a', href=True)
+        print(f"🔍 البوت: عثرت على {len(links)} رابط، جاري الفلترة...")
+
+        # أخذ أول 10 روابط فقط كما طلبت
+        count = 0
+        for link in links:
+            if count >= 10: break # التوقف بعد الوصول لـ 10 روابط جديدة
             
-            # فحص قاعدة البيانات: هل تم إرسال هذا الرابط من قبل؟
-            cur.execute("SELECT id FROM messages WHERE message = %s", (link_url,))
-            if cur.fetchone() is None:
-                print(f"✅ جديد: {title}")
+            title = link.get('title') or link.text.strip()
+            link_url = link.get('href', '')
+            
+            # فلترة الروابط العامة والترقيم
+            if not link_url.startswith("http"): continue
+            if "recent/page" in link_url: continue
+            
+            # شرط الفلترة للمحتوى
+            if title and ("مسلسل" in title or "حلقة" in title or "فيلم" in title):
                 
-                msg = f"🆕 {title}\n🔗 المشاهدة: {link_url}"
-                
-                # إرسال الرسالة لكل المستخدمين
-                for u in users:
-                    send_text_message(u['phone'], msg)
-                
-                # حفظ الرابط في قاعدة البيانات لمنع التكرار
-                cur.execute("INSERT INTO messages(message, msg_time) VALUES(%s, %s)", 
-                            (link_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-                conn.commit()
-                
-                # تهدئة السيرفر
-                time.sleep(3)
-            else:
-                # الرابط موجود، تخطيه
-                continue
-                
-    except Exception as e:
-        print(f"⚠️ حدث خطأ أثناء الفحص: {e}")
+                # التحقق من قاعدة البيانات
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                if not cur.fetchone():
+                    print(f"✅ البوت: وجدت محتوى جديد: {title}")
+                    msg = f"📺 {title}\n🔗 المشاهدة: {link_url}"
+                    
+                    # الإرسال لجميع المستخدمين
+                    for u in users:
+                        send_text_message(u['phone'], msg)
+                    
+                    # تسجيل في قاعدة البيانات
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                (link_url, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                    conn.commit()
+                    count += 1 # زيادة العداد عند إيجاد رابط جديد
+                    time.sleep(2) # تهدئة السيرفر
+
+        cur.close(); conn.close()
+        print("🏁 البوت: انتهت عملية الفحص بنجاح.")
+    except Exception as e: 
+        print(f"⚠️ البوت: حدث خطأ أثناء الفحص: {e}")
 
 # استدعاء الدالة
 check_recent_links()
