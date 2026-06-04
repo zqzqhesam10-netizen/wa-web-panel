@@ -41,41 +41,22 @@ def check_updates():
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # التركيز على الروابط التي تحتوي على مسار إيجابي للمحتوى
-        # في معظم هذه المواقع، تكون عناوين الحلقات داخل h2 أو div.post
-        # سنقوم بفلترة الروابط التي لا تنتمي للقائمة العلوية
-        for link in soup.find_all('a', href=True):
-            href = link.get('href')
-            title = link.get('title') or link.text.strip()
+        # البحث عن العناصر التي تحتوي على روابط الأفلام (غالباً في كلاسات معينة)
+        # سنجرب البحث عن div أو a التي لها كلاسات تحتوي على كلمة post
+        items = soup.select('div.post-card a') # جرب هذا أو div.poster a
+        
+        if not items:
+            # إذا لم يجد شيئاً، فليطبع كل الروابط لنرى الهيكل
+            items = soup.find_all('a')
             
-            # فلترة: نريد الروابط التي تحتوي على 'watch' أو 'series' أو 'movie' 
-            # ولا نريد روابط القوائم (مثل /category/ أو #)
-            if any(x in href for x in ['/watch/', '/series/', '/movie/']) and len(title) > 5:
+        for item in items:
+            title = item.get('title') or item.text.strip()
+            link = item.get('href', '')
+            if title and len(title) > 5 and 'tuktukhd.com' in link:
+                print(f"DEBUG_FOUND: {title} | {link}")
                 
-                # فحص هل هذا الرابط جديد (لم يُسجل في قاعدة البيانات)
-                # نستخدم الرابط (href) كمعرف فريد لمنع التكرار
-                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
-                
-                if not cur.fetchone():
-                    print(f"✅ وجدنا محتوى جديد: {title} | الرابط: {href}")
-                    
-                    # استخراج الصورة (غالباً تكون داخل نفس العنصر أو قريبة منه)
-                    img_tag = link.find('img')
-                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                    
-                    # هنا يمكنك تفعيل دالة الإرسال لاحقاً
-                    # send_image_message(phone, img_url, f"📺 {title}\n🔥 متاح الآن!")
-                    
-                    # تسجيل الرابط لمنع التكرار
-                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                                (href, datetime.now().strftime("%H:%M")))
-                    conn.commit()
-                
-                cur.close(); conn.close()
-            
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG_ERROR: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
