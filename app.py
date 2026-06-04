@@ -37,48 +37,46 @@ def check_updates():
     import cloudscraper
     print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع في موقع tuktukhd...")
     try:
-        scraper = cloudscraper.create_scraper()
-        url = "https://tuktukhd.com/recent/"
-        res = scraper.get(url, timeout=20)
-        
-        if res.status_code != 200:
-            print(f"❌ البوت: فشل الاتصال بالموقع، كود الاستجابة: {res.status_code}")
-            return
-
-        soup = BeautifulSoup(res.text, 'html.parser')
-        print(f"DEBUG: محتوى الـ HTML يبدأ بـ: {soup.prettify()[:1000]}")
-        items = soup.select('.post-item') 
-        print(f"🔍 البوت: اكتشفت {len(items)} عنصر في الصفحة الرئيسية.")
-
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        for item in items[:5]:
-            link_tag = item.find('a', href=True)
-            if not link_tag: 
-                print("⚠️ البوت: وجدت عنصراً فارغاً، سأتخطاه.")
-                continue
-            
-            title = link_tag.get('title') or link_tag.text.strip()
-            link_url = link_tag['href']
-            print(f"👀 البوت: عيني ترى عنوان: '{title}'")
+        scraper = cloudscraper.create_scraper()
+        # تأكد من أن الرابط هو المطلوب
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        soup = BeautifulSoup(res.text, 'html.parser')
 
-            # التحقق من الفلترة
-            if "مسلسل" in title or "حلقة" in title:
-                # التحقق من قاعدة البيانات
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-                if not cur.fetchone():
-                    print(f"🎯 البوت: هذا محتوى جديد ومطابق للمواصفات! جاري الإرسال...")
-                    # ... [كود الإرسال] ...
-                    print(f"✅ البوت: تم إرسال {title} بنجاح.")
-                else:
-                    print(f"⏭️ البوت: هذا المحتوى قديم (سبق إرساله)، سأتخطاه.")
-            else:
-                print(f"🚫 البوت: تجاهلت '{title}' لأنه لا يحتوي على كلمات البحث.")
+        # البحث الشامل عن كل روابط الصفحة
+        links = soup.find_all('a', href=True)
+        print(f"🔍 البوت: عثرت على {len(links)} رابط، جاري الفلترة...")
+
+        for link in links:
+            title = link.get('title') or link.text.strip()
+            link_url = link.get('href', '')
+            
+            # شرط الفلترة: يجب أن يحتوي العنوان على كلمات بحث، والرابط يجب أن يكون حلقة
+            if title and ("مسلسل" in title or "حلقة" in title):
+                if "/series/" in link_url or "/watch/" in link_url or "episode" in link_url:
+                    
+                    # التحقق من قاعدة البيانات لمنع التكرار
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                    if not cur.fetchone():
+                        print(f"✅ البوت: وجدت محتوى جديد: {title}")
+                        msg = f"📺 {title}\n🔗 المشاهدة: {link_url}"
+                        
+                        # الإرسال لجميع المستخدمين
+                        for u in users:
+                            send_text_message(u['phone'], msg)
+                        
+                        # تسجيل في قاعدة البيانات
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (link_url, datetime.now().strftime("%H:%M")))
+                        conn.commit()
         
         cur.close(); conn.close()
-        print("🏁 البوت: انتهت مهمة الاستطلاع بنجاح.")
-    except Exception as e:
-        print(f"⚠️ البوت: حدث عطل مفاجئ أثناء المراقبة: {e}")
+        print("🏁 البوت: انتهت عملية الفحص بنجاح.")
+    except Exception as e: 
+        print(f"⚠️ البوت: حدث خطأ أثناء الفحص: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
