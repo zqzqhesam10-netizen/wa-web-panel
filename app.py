@@ -41,37 +41,21 @@ def check_updates():
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # استهداف الحاويات التي تحمل الأفلام (بناءً على شكل الموقع في الصورة)
-        # غالباً المواقع التي تستخدم هذا التصميم تضع الروابط في كلاسات مثل 'poster' أو 'thumbnail'
-        # سنبحث عن الرابط الذي يحتوي على صورة داخل حاوية البوستر
-        posts = soup.select('div.poster a') # إذا لم يعمل، سنغير 'poster' إلى 'post'
+        # سنبحث عن جميع الـ div ونطبع الكلاسات الخاصة بها
+        print("DEBUG: بدأ فحص الحاويات...")
+        divs = soup.find_all('div')
+        for div in divs:
+            classes = div.get('class', [])
+            # نبحث عن الكلاسات التي قد تكون متعلقة بالبوسترات
+            if any(c in str(classes) for c in ['post', 'poster', 'item', 'card']):
+                print(f"DEBUG: تم العثور على حاوية بكلاس: {classes}")
+                # طباعة الروابط داخل هذه الحاوية لنرى هل هي ما نبحث عنه
+                links = div.find_all('a')
+                for l in links:
+                    print(f"DEBUG: وجدنا رابط داخل الكلاس {classes}: {l.get('href')}")
         
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        for post in posts:
-            link = post.get('href')
-            title = post.get('title')
-            img_tag = post.find('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-
-            if title and link:
-                # التحقق من التكرار
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link,))
-                if not cur.fetchone():
-                    print(f"✅ وجدنا محتوى جديد: {title}")
-                    
-                    # الإرسال (تم تفعيله الآن)
-                    msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-                    # يمكنك إرسال الرسائل هنا...
-                    
-                    # التسجيل
-                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                                (link, datetime.now().strftime("%H:%M")))
-                    conn.commit()
-        
-        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"DEBUG_ERROR: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
