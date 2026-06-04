@@ -19,32 +19,17 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
+# دالة إرسال الصورة (جديدة)
 def send_image_message(phone, image_url, caption):
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": phone,
-        "type": "image",
-        "image": {"link": image_url, "caption": caption}
-    }
-    
     try:
-        response = requests.post(url, headers=headers, json=payload)
-        result = response.json()
-        
-        if response.status_code == 200:
-            print(f"✅ تم الإرسال فعلياً إلى {phone}")
-        else:
-            # هنا سنعرف لماذا يفشل الإرسال (هل هو خطأ توكن، أم رقم خطأ، أم حظر)
-            print(f"❌ فشل الإرسال للرقم {phone} | الخطأ: {result}")
-            
-    except Exception as e:
-        print(f"❌ خطأ تقني في الاتصال بـ API: {e}")
-        
+        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
+                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
+                      json={
+                          "messaging_product": "whatsapp",
+                          "to": phone,
+                          "type": "image",
+                          "image": {"link": image_url, "caption": caption}
+                      })
     except: pass
 
 def check_updates():
@@ -56,41 +41,36 @@ def check_updates():
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        # الرابط الجديد
-        url = "https://tuktukhd.com/recent/"
+        url = "https://www.fasel-hd.cam/most_recent"
         res = scraper.get(url, timeout=20)
-        res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # كلمات الفلترة المحدثة للموقع الجديد
-        keywords = ["مسلسل", "حلقة", "فيلم"]
+        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
         exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
-        # حلقة معالجة الروابط (نفس منطقك الأصلي تماماً)
+        # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
         for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
-            link_url = link.get('href') 
+            link_url = link.get('href') # استخدام الرابط كمعرف فريد
             
-            # التأكد من أن الرابط ليس فارغاً
-            if not link_url: continue
-
             if title and any(k in title for k in keywords):
                 if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
-                    # التحقق من الرابط في قاعدة البيانات
+                    # التحقق من الرابط في قاعدة البيانات (أكثر دقة من العنوان)
                     cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
                     
                     if not cur.fetchone():
                         print(f"✅ محتوى جديد سيتم إرساله: {title}")
                         img_tag = link.find('img') or link.find_previous('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                         
-                        # الإرسال للمستخدمين (كما هو في كودك الأصلي)
+                        # الإرسال للمستخدمين
                         for u in users:
+                            # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
                             send_image_message(u['phone'], img_url, msg)
                         
-                        # تسجيل الرابط في قاعدة البيانات
+                        # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (link_url, datetime.now().strftime("%H:%M")))
                         conn.commit()
@@ -98,7 +78,7 @@ def check_updates():
         cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
-        
+
 @app.route("/")
 def home(): return render_template("chat.html")
 
