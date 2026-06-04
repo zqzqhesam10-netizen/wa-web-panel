@@ -41,21 +41,24 @@ def check_updates():
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
+        # الرابط الجديد
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=20)
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # الكلمات الدالة لموقع tuktukhd
+        # كلمات الفلترة المحدثة للموقع الجديد
         keywords = ["مسلسل", "حلقة", "فيلم"]
-        exclude_words = ["أحدث", "الأكثر", "تصنيف", "صفحة"]
+        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
-        # حلقة لمعالجة الروابط (نفس منطقك الأصلي)
+        # حلقة معالجة الروابط (نفس منطقك الأصلي تماماً)
         for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
-            link_url = link.get('href')
+            link_url = link.get('href') 
             
-            # الفلترة: يجب أن يحتوي العنوان على كلمات دالة وأرقام (للتأكد أنها حلقة/فيلم)
+            # التأكد من أن الرابط ليس فارغاً
+            if not link_url: continue
+
             if title and any(k in title for k in keywords):
                 if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
                     
@@ -64,16 +67,15 @@ def check_updates():
                     
                     if not cur.fetchone():
                         print(f"✅ محتوى جديد سيتم إرساله: {title}")
-                        
                         img_tag = link.find('img') or link.find_previous('img')
                         img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
                         msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
                         
-                        # الإرسال للمستخدمين
+                        # الإرسال للمستخدمين (كما هو في كودك الأصلي)
                         for u in users:
                             send_image_message(u['phone'], img_url, msg)
                         
-                        # تسجيل الرابط لمنع التكرار
+                        # تسجيل الرابط في قاعدة البيانات
                         cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                                     (link_url, datetime.now().strftime("%H:%M")))
                         conn.commit()
