@@ -53,6 +53,7 @@ def check_updates():
         for link in links:
             title = link.get('title') or link.text.strip()
             link_url = link.get('href', '')
+            print(f"👀 فحص: '{title}' | الرابط: {link_url}")
             
             # شرط الفلترة: يجب أن يحتوي العنوان على كلمات بحث، والرابط يجب أن يكون حلقة
             if title and ("مسلسل" in title or "حلقة" in title):
