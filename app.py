@@ -35,8 +35,6 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    import time
-    print("🕵️‍♂️ البوت: بدأ الفحص في موقع tuktukhd...")
     try:
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT phone FROM users")
@@ -48,55 +46,38 @@ def check_updates():
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # البحث عن الروابط
-        links = soup.select('a')
-        processed_count = 0
-        found_existing = 0
+        # الكلمات الدالة لموقع tuktukhd
+        keywords = ["مسلسل", "حلقة", "فيلم"]
+        exclude_words = ["أحدث", "الأكثر", "تصنيف", "صفحة"]
 
-        for link in links:
-            if processed_count >= 10: break
-            
+        # حلقة لمعالجة الروابط (نفس منطقك الأصلي)
+        for link in soup.find_all('a', href=True):
             title = link.get('title') or link.text.strip()
-            link_url = link.get('href', '')
+            link_url = link.get('href')
             
-            # فلترة: استبعاد الروابط العامة أو صفحات الترقيم
-            if not link_url.startswith("http") or "page" in link_url: continue
-            
-            # شروط المحتوى: يجب أن يحتوي على كلمات دالة وأن يكون رقماً (حلقة)
-            if not (title and any(k in title for k in ["مسلسل", "حلقة", "فيلم"])): continue
-            if not any(char.isdigit() for char in title): continue
-            if any(e in title for e in ["أحدث", "الأكثر", "تصنيف"]): continue
-            
-            processed_count += 1
-            
-            # تحقق من التكرار في قاعدة البيانات
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-            if cur.fetchone():
-                found_existing += 1
-                continue
-            
-            # جلب الصورة والرسالة
-            img_tag = link.find('img') or link.find_previous('img')
-            img_url = img_tag.get('data-src') or img_tag.get('src') or "https://i.imgur.com/example.jpg"
-            msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
-            
-            # الإرسال للجميع مع تنظيف الأرقام الفاسدة
-            for u in users:
-                phone = str(u['phone']).strip()
-                # التأكد أن الرقم صالح (أرقام فقط وطوله أكبر من 8)
-                if phone.isdigit() and len(phone) > 8:
-                    send_image_message(phone, img_url, msg)
-                    time.sleep(0.5) 
-            
-            # تسجيل المحتوى الجديد
-            cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                        (link_url, datetime.now().strftime("%H:%M")))
-            conn.commit()
-            print(f"✅ تم الإرسال بنجاح: {title}")
-
-        if found_existing >= 10: print("🏁 البوت: أول 10 عناصر موجودة مسبقاً، لا يوجد جديد.")
-        else: print(f"🏁 انتهت المهمة.")
-        
+            # الفلترة: يجب أن يحتوي العنوان على كلمات دالة وأرقام (للتأكد أنها حلقة/فيلم)
+            if title and any(k in title for k in keywords):
+                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
+                    
+                    # التحقق من الرابط في قاعدة البيانات
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                    
+                    if not cur.fetchone():
+                        print(f"✅ محتوى جديد سيتم إرساله: {title}")
+                        
+                        img_tag = link.find('img') or link.find_previous('img')
+                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
+                        msg = f"📺 {title}\n🔥 متاح الآن للمشاهدة!"
+                        
+                        # الإرسال للمستخدمين
+                        for u in users:
+                            send_image_message(u['phone'], img_url, msg)
+                        
+                        # تسجيل الرابط لمنع التكرار
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (link_url, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        
         cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
