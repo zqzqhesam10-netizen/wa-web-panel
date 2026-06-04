@@ -47,7 +47,7 @@ def check_updates():
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
 
-       keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
+        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
         exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
 
         # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
