@@ -36,48 +36,55 @@ def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        
+        url = "https://esk.onl/"
         scraper = cloudscraper.create_scraper()
-        url = "https://www.fasel-hd.cam/most_recent"
         res = scraper.get(url, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        keywords = ["مسلسل", "انمي", "برنامج", "فيلم"]
-        exclude_words = ["قسم", "تصنيف", "جدول", "الأكثر مشاهدة"]
-
-        # حلقة لمعالجة كل الروابط بدون توقف (إزالة break)
-        for link in soup.find_all('a', href=True):
-            title = link.get('title') or link.text.strip()
-            link_url = link.get('href') # استخدام الرابط كمعرف فريد
+        # استهداف العناصر التي تحتوي على الحلقات
+        episodes = soup.select('.post-item') 
+        
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        for ep in episodes[:5]: # معالجة آخر 5 حلقات
+            title_tag = ep.find('h3') or ep.find('a', class_='post-link')
+            if not title_tag: continue
             
-            if title and any(k in title for k in keywords):
-                if not any(e in title for e in exclude_words) and any(char.isdigit() for char in title):
+            title = title_tag.text.strip()
+            link_url = title_tag.get('href') if title_tag.name == 'a' else title_tag.find('a').get('href')
+            
+            # --- شرط الفلترة المدمج ---
+            if "مسلسل" in title or "حلقة" in title:
+                
+                # التأكد من أنه رابط صالح
+                if not link_url or not link_url.startswith('http'): continue
+
+                # التحقق من عدم تكرار الحلقة في قاعدة البيانات
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                if not cur.fetchone():
+                    # جلب الصورة
+                    img_tag = ep.find('img')
+                    img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
                     
-                    # التحقق من الرابط في قاعدة البيانات (أكثر دقة من العنوان)
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                    # الرسالة
+                    msg = f"🆕 {title}\n🔗 [اضغط هنا للمشاهدة]({link_url})"
                     
-                    if not cur.fetchone():
-                        print(f"✅ محتوى جديد سيتم إرساله: {title}")
-                        img_tag = link.find('img') or link.find_previous('img')
-                        img_url = img_tag.get('data-src') or img_tag.get('src') if img_tag else "https://i.imgur.com/example.jpg"
-                        msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                        
-                        # الإرسال للمستخدمين
-                        for u in users:
-                            # تأكد من استبدال send_image_message بالدالة المعتمدة لديك
-                            send_image_message(u['phone'], img_url, msg)
-                        
-                        # تسجيل الرابط في قاعدة البيانات كـ message لمنع التكرار مستقبلاً
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (link_url, datetime.now().strftime("%H:%M")))
-                        conn.commit()
-                        
+                    # الإرسال للمشتركين
+                    cur.execute("SELECT phone FROM users")
+                    users = cur.fetchall()
+                    for u in users:
+                        send_image_message(u['phone'], img_url, msg)
+                    
+                    # تسجيل الرابط في قاعدة البيانات لمنع إرساله مرة أخرى
+                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                (link_url, datetime.now().strftime("%H:%M")))
+                    conn.commit()
+                    print(f"✅ تم إرسال: {title}")
+            # ---------------------------
+        
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
+        print(f"خطأ أثناء فحص موقع esk.onl: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
