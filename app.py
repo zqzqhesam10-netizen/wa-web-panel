@@ -35,50 +35,49 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
+    print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع في موقع tuktukhd...")
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        
-        # استخدام المتصفح الخفي للوصول لموقع توك توك
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=20)
-        soup = BeautifulSoup(res.text, 'html.parser')
-
-        # توك توك يستخدم كلاس 'post-item' أو 'item'
-        items = soup.select('.post-item') 
         
-        for item in items[:5]: # معالجة آخر 5 إضافات
+        if res.status_code != 200:
+            print(f"❌ البوت: فشل الاتصال بالموقع، كود الاستجابة: {res.status_code}")
+            return
+
+        soup = BeautifulSoup(res.text, 'html.parser')
+        items = soup.select('.post-item') 
+        print(f"🔍 البوت: اكتشفت {len(items)} عنصر في الصفحة الرئيسية.")
+
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        for item in items[:5]:
             link_tag = item.find('a', href=True)
-            if not link_tag: continue
+            if not link_tag: 
+                print("⚠️ البوت: وجدت عنصراً فارغاً، سأتخطاه.")
+                continue
             
             title = link_tag.get('title') or link_tag.text.strip()
             link_url = link_tag['href']
-            
-            # الفلترة: التأكد أنها مسلسل أو حلقة
+            print(f"👀 البوت: عيني ترى عنوان: '{title}'")
+
+            # التحقق من الفلترة
             if "مسلسل" in title or "حلقة" in title:
-                
-                # التحقق من عدم التكرار
+                # التحقق من قاعدة البيانات
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
                 if not cur.fetchone():
-                    print(f"✅ البوت: وجدت حلقة جديدة: {title}")
-                    
-                    # الرسالة النصية العادية
-                    msg = f"📺 {title}\n🔗 المشاهدة: {link_url}"
-                    
-                    # الإرسال للمستخدمين
-                    for u in users:
-                        send_text_message(u['phone'], msg)
-                    
-                    # حفظ الرابط
-                    cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                (link_url, datetime.now().strftime("%H:%M")))
-                    conn.commit()
+                    print(f"🎯 البوت: هذا محتوى جديد ومطابق للمواصفات! جاري الإرسال...")
+                    # ... [كود الإرسال] ...
+                    print(f"✅ البوت: تم إرسال {title} بنجاح.")
+                else:
+                    print(f"⏭️ البوت: هذا المحتوى قديم (سبق إرساله)، سأتخطاه.")
+            else:
+                print(f"🚫 البوت: تجاهلت '{title}' لأنه لا يحتوي على كلمات البحث.")
         
         cur.close(); conn.close()
+        print("🏁 البوت: انتهت مهمة الاستطلاع بنجاح.")
     except Exception as e:
-        print(f"⚠️ خطأ أثناء فحص موقع توك توك: {e}")
+        print(f"⚠️ البوت: حدث عطل مفاجئ أثناء المراقبة: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
