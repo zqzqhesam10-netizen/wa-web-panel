@@ -122,9 +122,9 @@ def add_user():
 
 import subprocess
 
-@app.route("/api/force_check", methods=["POST"])
+@app.route("/api/force_check", methods=["GET", "POST"])
 def force_check():
-    # تشغيل الفحص كعملية مستقلة تماماً لا تؤثر على السيرفر
+    # تشغيل الفحص
     subprocess.Popen(["python3", "-c", "from app import check_updates; check_updates()"])
     return jsonify({"status": "Started as background process"})
 
