@@ -46,6 +46,7 @@ def check_updates():
             return
 
         soup = BeautifulSoup(res.text, 'html.parser')
+        print(f"DEBUG: محتوى الـ HTML يبدأ بـ: {soup.prettify()[:1000]}")
         items = soup.select('.post-item') 
         print(f"🔍 البوت: اكتشفت {len(items)} عنصر في الصفحة الرئيسية.")
 
