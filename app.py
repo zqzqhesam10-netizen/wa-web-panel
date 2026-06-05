@@ -81,7 +81,7 @@ def check_updates():
             if not title or not parent: continue
 
             # استخراج الرابط وتجهيزه عبر الـ Proxy لتجاوز حظر واتساب
-            img_url = img.get("data-src") or img.get("data-original") or img.get("src")
+            https://scontent.famm1-1.fna.fbcdn.net/v/t39.8562-6/120009688_325579128711709_1736099511507353176_n.png
             if img_url and img_url.startswith("//"): img_url = "https:" + img_url
             if not img_url: continue
                 
