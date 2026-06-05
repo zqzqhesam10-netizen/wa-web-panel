@@ -19,9 +19,8 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
-def send_text_message(phone, message_body):
+def send_whatsapp_message(phone, message_body, img_url=None):
     import requests
-    import json
     
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
     headers = {
@@ -29,24 +28,36 @@ def send_text_message(phone, message_body):
         "Content-Type": "application/json"
     }
     
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": phone.replace('+', '').strip(),
-        "type": "text",
-        "text": {"body": message_body}
-    }
+    # التحقق مما إذا كنا سنرسل صورة أم نصاً فقط
+    if img_url:
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone.replace('+', '').strip(),
+            "type": "image",
+            "image": {"link": img_url},
+            "caption": message_body
+        }
+    else:
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone.replace('+', '').strip(),
+            "type": "text",
+            "text": {"body": message_body}
+        }
     
     response = requests.post(url, headers=headers, json=payload)
-    print(f"DEBUG: حالة إرسال النص: {response.status_code}")
-
+    print(f"DEBUG: حالة الإرسال ({'صورة' if img_url else 'نص'}): {response.status_code}")
+    return response.status_code
+    
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
     import hashlib
+    from datetime import datetime
+    import requests
 
     try:
         print("===== CHECK UPDATES STARTED =====")
-
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -59,88 +70,70 @@ def check_updates():
         response = scraper.get(url, timeout=30)
         response.encoding = "utf-8"
 
-        print("PAGE STATUS:", response.status_code)
-        print("PAGE LENGTH:", len(response.text))
-
         soup = BeautifulSoup(response.text, "html.parser")
-
         sent_count = 0
         MAX_SEND = 5
-        sent_numbers = set()  # منع التكرار في نفس الفحص
+        sent_numbers = set()
 
         for img in soup.find_all("img"):
             if sent_count >= MAX_SEND:
-                print("STOP: reached 5 messages limit")
                 break
 
             title = (img.get("alt") or "").strip()
-            if not title:
-                continue
+            if not title: continue
 
             parent = img.find_parent("a")
-            if not parent:
-                continue
+            if not parent: continue
 
-            link_url = parent.get("href")
+            # سحب رابط الصورة الحقيقي
+            img_url = img.get("data-src") or img.get("data-original") or img.get("src")
+            if img_url and img_url.startswith("//"):
+                img_url = "https:" + img_url
+
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
 
-            # منع التكرار بناءً على UID
             cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
             if cur.fetchone():
                 continue
 
-            caption = f"📺 {title}\n🔥 جديد الآن\n🔗 {link_url}"
+            # النص المدمج (بدون روابط لضمان القبول)
+            caption = f"📺 {title}\n🔥 متاح الآن!"
             print("NEW CONTENT:", title)
 
-            # إرسال نص لكل المستخدمين (مرة واحدة لكل رقم)
             for user in users:
-                phone = ''.join(filter(str.isdigit, user["phone"]))  # تنظيف الرقم
-                if phone in sent_numbers:
-                    continue
+                phone = ''.join(filter(str.isdigit, user["phone"]))
+                if phone in sent_numbers: continue
                 sent_numbers.add(phone)
-
-                print("SENDING TO:", phone)
 
                 try:
                     url_api = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-
-                    payload = {
-                        "messaging_product": "whatsapp",
-                        "to": phone,
-                        "type": "text",
-                        "text": {"body": caption}
-                    }
-
                     headers = {
                         "Authorization": f"Bearer {ACCESS_TOKEN}",
                         "Content-Type": "application/json",
+                        "User-Agent": "Mozilla/5.0"
+                    }
+
+                    # إرسال الصورة + النص كرسالة مدمجة
+                    payload = {
+                        "messaging_product": "whatsapp",
+                        "to": phone,
+                        "type": "image",
+                        "image": {"link": img_url},
+                        "caption": caption
                     }
 
                     r = requests.post(url_api, headers=headers, json=payload)
-
-                    print("STATUS:", r.status_code)
-                    print("RESPONSE:", r.text)
-
+                    print(f"SEND TO {phone} | STATUS: {r.status_code}")
                 except Exception as e:
                     print("SEND ERROR:", e)
 
-            # تسجيل الإرسال في قاعدة البيانات
-            cur.execute(
-                """
-                INSERT INTO messages (phone, message, sender, msg_time)
-                VALUES ('system', %s, 'system', %s)
-                """,
-                (uid, datetime.now().strftime("%H:%M")),
-            )
+            cur.execute("INSERT INTO messages (message, phone, sender, msg_time) VALUES (%s, 'system', 'system', %s)", 
+                        (uid, datetime.now().strftime("%H:%M")))
             conn.commit()
             sent_count += 1
 
-        print("TOTAL SENT:", sent_count)
-        print("===== CHECK UPDATES FINISHED =====")
-
         cur.close()
         conn.close()
-
     except Exception as e:
         print("CHECK ERROR:", e)
                 
