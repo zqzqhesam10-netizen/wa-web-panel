@@ -34,10 +34,41 @@ def send_image_message(phone, image_url, caption):
     except Exception as e:
         print(f"DEBUG: خطأ في الإرسال: {e}")
     
+def send_image_message(phone, image_url, caption):
+    try:
+        # 1. تحميل الصورة إلى الذاكرة
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        img_response = requests.get(image_url, headers=headers, timeout=15)
+        if img_response.status_code != 200: return
+        
+        # 2. رفع الصورة إلى فيسبوك (Upload)
+        upload_url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/media"
+        files = {
+            'file': ('image.jpg', img_response.content, 'image/jpeg'),
+            'messaging_product': (None, 'whatsapp'),
+            'type': (None, 'image')
+        }
+        auth = {'Authorization': f'Bearer {ACCESS_TOKEN}'}
+        upload_res = requests.post(upload_url, headers=auth, files=files).json()
+        
+        media_id = upload_res.get("id")
+        if not media_id: return
+
+        # 3. إرسال الرسالة باستخدام الـ media_id
+        message_url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone.replace('+', '').strip(),
+            "type": "image",
+            "image": {"id": media_id, "caption": caption}
+        }
+        requests.post(message_url, headers={"Authorization": f'Bearer {ACCESS_TOKEN}', "Content-Type": "application/json"}, json=payload)
+        
+    except Exception as e:
+        print(f"DEBUG: خطأ في رفع الصورة: {e}")
+
 def check_updates():
-    from bs4 import BeautifulSoup
-    import cloudscraper
-    print("===== بدأ فحص التحديثات الجديدة =====")
+    print("===== بدأ فحص التحديثات الجديدة (أول 5 فقط) =====")
     try:
         conn = db(); cur = conn.cursor()
         cur.execute("SELECT phone FROM users")
@@ -48,45 +79,32 @@ def check_updates():
         res = scraper.get(url, timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # 1. طباعة كل الكلاسات الموجودة لنعرف اسم الكلاس الصحيح
-        classes = set([tag.get('class')[0] for tag in soup.find_all(class_=True)])
-        print(f"DEBUG: الكلاسات المكتشفة في الصفحة: {classes}")
-
-        # 2. استهداف عام جداً (كل الروابط التي بداخلها صورة)
+        # استخراج أول 5 عناصر فقط
         items = soup.find_all("a")
-        found_count = 0
-
-        for item in items:
-            if count >= 5: break # إيقاف بعد الوصول لـ 5
+        count = 0
         
         for item in items:
+            if count >= 5: break # إيقاف بعد الوصول لـ 5
+            
             img = item.find("img")
             if img:
-                # هذا الجزء سيضمن أننا وجدنا شيئاً
-                title = item.get("title") or (img.get("alt") if img else "لا يوجد عنوان")
+                title = item.get("title") or (img.get("alt") if img else "جديد")
                 link_url = item.get("href")
+                img_url = img.get("data-src") or img.get("src")
                 
-                # طباعة أول 5 محاولات لنعرف لماذا لا يتم الإرسال
-                if found_count < 5:
-                    print(f"DEBUG: تم فحص رابط: {title} | الرابط: {link_url}")
-                
-                # التحقق من قاعدة البيانات
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
                 if not cur.fetchone():
-                    print(f"✅ محتوى جديد: {title}")
-                    img_url = img.get("data-src") or img.get("src")
                     msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                    
                     for u in users:
                         send_image_message(u[0], img_url, msg)
                     
                     cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
                                 (link_url, datetime.now().strftime("%H:%M")))
                     conn.commit()
-                    found_count += 1
+                    count += 1
         
         cur.close(); conn.close()
-        print(f"===== تم الانتهاء: تم إرسال {found_count} تحديث =====")
+        print(f"===== تم الانتهاء: تم إرسال {count} تحديث =====")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
                 
