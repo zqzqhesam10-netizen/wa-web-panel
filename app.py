@@ -60,11 +60,9 @@ def check_updates():
 
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
-
         print("USERS COUNT:", len(users))
 
         scraper = cloudscraper.create_scraper()
-
         url = "https://tuktukhd.com/recent/"
         response = scraper.get(url, timeout=30)
         response.encoding = "utf-8"
@@ -76,9 +74,9 @@ def check_updates():
 
         sent_count = 0
         MAX_SEND = 5
+        sent_numbers = set()  # منع التكرار في نفس الفحص
 
         for img in soup.find_all("img"):
-
             if sent_count >= MAX_SEND:
                 print("STOP: reached 5 messages limit")
                 break
@@ -92,55 +90,59 @@ def check_updates():
                 continue
 
             link_url = parent.get("href")
-
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
 
-            # منع التكرار
-            cur.execute(
-                "SELECT id FROM messages WHERE message=%s LIMIT 1",
-                (uid,)
-            )
-
+            # منع التكرار بناءً على UID
+            cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
             if cur.fetchone():
                 continue
 
-            # 🔥 الصورة
+            # جلب الصورة من الموقع أو استخدام رابط ثابت إذا غير صالح
             img_url = (
-                img.get("data-src")
-                or img.get("data-lazy-src")
-                or img.get("src")
+                img.get("data-src") or img.get("data-lazy-src") or img.get("src")
             )
-
-            # تنظيف الصور غير الآمنة
-            if not img_url or "?" in img_url or "lazy" in img_url:
+            if not img_url or "?" in img_url or "lazy" in img_url or "base64" in img_url:
                 img_url = "https://via.placeholder.com/500x750.png"
 
             caption = f"📺 {title}\n🔥 جديد الآن"
-
             print("NEW CONTENT:", title)
 
-            # إرسال لكل المستخدمين
+            # إرسال لكل المستخدمين (مرة واحدة لكل رقم)
             for user in users:
-                phone = user["phone"].replace("+", "").strip()
+                phone = ''.join(filter(str.isdigit, user["phone"]))  # تنظيف الرقم
+                if phone in sent_numbers:
+                    continue
+                sent_numbers.add(phone)
 
                 print("SENDING TO:", phone)
-
                 try:
-                    send_image_message(phone, img_url, caption)
+                    # إرسال الصورة + طباعة الاستجابة
+                    url_api = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+                    payload = {
+                        "messaging_product": "whatsapp",
+                        "to": phone,
+                        "type": "image",
+                        "image": {"link": img_url, "caption": caption},
+                    }
+                    headers = {
+                        "Authorization": f"Bearer {ACCESS_TOKEN}",
+                        "Content-Type": "application/json",
+                    }
+                    r = requests.post(url_api, headers=headers, json=payload)
+                    print("STATUS:", r.status_code)
+                    print("RESPONSE:", r.text)
                 except Exception as e:
                     print("SEND ERROR:", e)
 
-            # تسجيل الإرسال
-            cur.execute("""
+            # تسجيل الإرسال في قاعدة البيانات
+            cur.execute(
+                """
                 INSERT INTO messages (phone, message, sender, msg_time)
                 VALUES ('system', %s, 'system', %s)
-            """, (
-                uid,
-                datetime.now().strftime("%H:%M")
-            ))
-
+                """,
+                (uid, datetime.now().strftime("%H:%M")),
+            )
             conn.commit()
-
             sent_count += 1
 
         print("TOTAL SENT:", sent_count)
