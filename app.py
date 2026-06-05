@@ -48,6 +48,7 @@ def check_updates():
     scraper = cloudscraper.create_scraper()
     try:
         res = scraper.get("https://tuktukhd.com/recent/", timeout=30)
+        res.encoding = 'utf-8
         soup = BeautifulSoup(res.text, 'html.parser')
         
         # البحث عن كل الروابط التي تحتوي على صور (الأفلام)
