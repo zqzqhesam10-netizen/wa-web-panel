@@ -50,6 +50,7 @@ def check_updates():
 
         # استخراج العناصر (تحديث الاستهداف)
         items = soup.find_all("div", class_="post-box")[:5]
+        print(f"DEBUG: تم العثور على {len(items)} عنصر في الصفحة") # سطر كشف المشكلة
         
         for item in items:
             title_tag = item.find("h2")
