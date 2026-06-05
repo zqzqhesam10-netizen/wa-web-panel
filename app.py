@@ -30,14 +30,26 @@ def send_message(phone, message):
 # دالة إرسال الصورة (جديدة)
 def send_image_message(phone, image_url, caption):
     try:
-        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages",
-                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
-                      json={
-                          "messaging_product": "whatsapp",
-                          "to": phone,
-                          "type": "image",
-                          "image": {"link": image_url, "caption": caption}
-                      })
+        url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone,
+            "type": "image",
+            "image": {"link": image_url, "caption": caption}
+        }
+        
+        response = requests.post(url, headers=headers, json=payload)
+        
+        # إضافة طباعة للنتيجة لفهم سبب عدم الوصول
+        if response.status_code == 200:
+            print(f"✅ نجاح: تم إرسال الصورة إلى {phone}")
+        else:
+            print(f"❌ خطأ من واتساب: {response.status_code} - الرد: {response.text}")
+            
+    except Exception as e:
+        print(f"❌ خطأ برمجي في الإرسال: {e}")
+        
     except: pass
 
 def check_updates():
