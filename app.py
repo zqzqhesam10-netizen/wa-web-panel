@@ -21,36 +21,18 @@ def init_db():
 
 def send_image_message(phone, image_url, caption):
     try:
-        # 1. تحميل الصورة إلى الذاكرة
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        img_response = requests.get(image_url, headers=headers, timeout=15)
-        if img_response.status_code != 200: return
-        
-        # 2. رفع الصورة إلى فيسبوك (Upload)
-        upload_url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/media"
-        files = {
-            'file': ('image.jpg', img_response.content, 'image/jpeg'),
-            'messaging_product': (None, 'whatsapp'),
-            'type': (None, 'image')
-        }
-        auth = {'Authorization': f'Bearer {ACCESS_TOKEN}'}
-        upload_res = requests.post(upload_url, headers=auth, files=files).json()
-        
-        media_id = upload_res.get("id")
-        if not media_id: return
-
-        # 3. إرسال الرسالة باستخدام الـ media_id الذي حصلنا عليه
-        message_url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+        url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
         payload = {
             "messaging_product": "whatsapp",
             "to": phone.replace('+', '').strip(),
             "type": "image",
-            "image": {"id": media_id, "caption": caption}
+            "image": {"link": image_url, "caption": caption}
         }
-        requests.post(message_url, headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}, json=payload)
-        
+        res = requests.post(url, headers=headers, json=payload)
+        print(f"DEBUG: حالة الإرسال: {res.status_code}")
     except Exception as e:
-        print(f"DEBUG: خطأ في رفع الصورة: {e}")
+        print(f"DEBUG: خطأ في الإرسال: {e}")
     
 def check_updates():
     from bs4 import BeautifulSoup
@@ -73,6 +55,9 @@ def check_updates():
         # 2. استهداف عام جداً (كل الروابط التي بداخلها صورة)
         items = soup.find_all("a")
         found_count = 0
+
+        for item in items:
+            if count >= 5: break # إيقاف بعد الوصول لـ 5
         
         for item in items:
             img = item.find("img")
