@@ -55,59 +55,46 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    from datetime import datetime
-    
-    scraper = cloudscraper.create_scraper()
     try:
-        # 1. جلب الصفحة
-        res = scraper.get("https://tuktukhd.com/recent/", timeout=30)
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        scraper = cloudscraper.create_scraper()
+        # نستخدم الرابط الذي يعمل معك
+        url = "https://tuktukhd.com/recent/" 
+        res = scraper.get(url, timeout=30)
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
+
+        # استهداف العناصر بدقة (البحث عن div.poster)
+        posts = soup.select('div.poster')
         
-        # 2. استخراج العناصر
-        links = soup.find_all('a', href=True)
-        
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        for link in links:
-            img_tag = link.find('img') or link.find_previous('img')
-            if not img_tag:
-                continue
-                
-            title = img_tag.get('alt', 'بدون عنوان')
+        for post in posts:
+            link = post.find('a', href=True)
+            img = post.find('img')
+            if not link or not img: continue
+            
+            title = img.get('alt') or "محتوى جديد"
             link_url = link['href']
+            # التقاط الرابط الصحيح للصورة
+            img_url = img.get('data-src') or img.get('src')
+            if img_url.startswith('//'): img_url = 'https:' + img_url
             
-            # تصحيح رابط الصورة
-            img_url = img_tag.get('data-src') or img_tag.get('src')
-            if img_url and img_url.startswith('//'):
-                img_url = 'https:' + img_url
-            
-            # 3. التحقق من التكرار (باستخدام الرابط)
+            # التحقق من عدم التكرار
             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
             if not cur.fetchone():
-                print(f"✅ محتوى جديد: {title}")
+                cur.execute("SELECT phone FROM users")
+                users = cur.fetchall()
                 msg = f"📺 {title}\n🔥 متاح الآن!"
                 
-                # 4. جلب المستخدمين والإرسال
-                cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-                users = cur.fetchall()
-                
                 for u in users:
-                    try:
-                        # إرسال الصورة مع الرابط كـ Caption إذا أردت
-                        send_image_message(u['phone'], img_url, msg)
-                    except Exception as e:
-                        print(f"خطأ إرسال لـ {u['phone']}: {e}")
+                    send_image_message(u['phone'], img_url, msg)
                 
-                # 5. حفظ في القاعدة
-                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
                             (link_url, datetime.now().strftime("%H:%M")))
                 conn.commit()
-                break # نكتفي بإرسال أحدث عنصر واحد
-                
+                break # إرسال أحدث محتوى فقط
         cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ في الدالة: {e}")
+        print(f"DEBUG: خطأ في الفحص: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
