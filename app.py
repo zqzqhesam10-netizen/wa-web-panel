@@ -20,33 +20,26 @@ def init_db():
     conn.commit(); cur.close(); conn.close()
 
 def send_whatsapp_message(phone, message_body, img_url=None):
-    import requests
-    
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {ACCESS_TOKEN}", 
         "Content-Type": "application/json"
     }
     
-    # التحقق مما إذا كنا سنرسل صورة أم نصاً فقط
-    if img_url:
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone.replace('+', '').strip(),
-            "type": "image",
-            "image": {"link": img_url},
-            "caption": message_body
+    # هنا يتم وضع التنسيق الجديد
+    # نقوم بإرسال النص مع رابط الصورة ليقوم واتساب بعمل معاينة (Preview)
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone.replace('+', '').strip(),
+        "type": "text",
+        "text": {
+            "preview_url": True, 
+            "body": f"🔔 *إشعار جديد من الاستراحة!*\n\n{message_body}\n\nاضغط هنا للمشاهدة:\n{img_url}"
         }
-    else:
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone.replace('+', '').strip(),
-            "type": "text",
-            "text": {"body": message_body}
-        }
+    }
     
     response = requests.post(url, headers=headers, json=payload)
-    print(f"DEBUG: حالة الإرسال ({'صورة' if img_url else 'نص'}): {response.status_code}")
+    print(f"DEBUG: حالة الإرسال: {response.status_code}")
     return response.status_code
     
 def check_updates():
