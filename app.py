@@ -49,8 +49,9 @@ def send_image_message(phone, image_url, caption):
 
 # ... (باقي كود التطبيق مثل check_updates و @app.route) ...
         
-    except Exception
-    pass
+    # ابحث عن السطر 52، واجعله هكذا تماماً:
+        except Exception: 
+            pass
 
 def check_updates():
     from bs4 import BeautifulSoup
