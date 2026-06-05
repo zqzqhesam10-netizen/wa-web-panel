@@ -41,48 +41,20 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    from bs4 import BeautifulSoup
-    import cloudscraper
-    
-    try:
-        scraper = cloudscraper.create_scraper()
-        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
-        res.encoding = 'utf-8'
-        soup = BeautifulSoup(res.text, 'html.parser')
+    # ... (نفس كود السكرابر السابق) ...
+    if not cur.fetchone():
+        print(f"🚀 إرسال جديد: {title}")
+        msg = f"📺 *{title}*\n\n{href}"
         
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-        users = cur.fetchall()
-
-        # استخراج الروابط
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            # تجاهل القوائم والتركيز على الروابط الطويلة (محتوى)
-            if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
-                continue
-            
-            title = a.get('title') or a.get_text(strip=True)
-            
-            # تحقق من قاعدة البيانات (هل أرسلنا هذا الرابط من قبل؟)
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
-            if not cur.fetchone():
-                print(f"🚀 إرسال جديد: {title}")
-                
-                # رسالة للمشتركين
-                msg = f"📺 *{title}*\n\nاضغط للمشاهدة:\n{href}"
-                for u in users:
-                    send_image_message(u['phone'], img_url, msg)
-                
-                # حفظ الرابط في قاعدة البيانات
-                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                            (href, datetime.now().strftime("%H:%M:%S")))
-                conn.commit()
-                # نكتفي بإرسال أحدث حلقة واحدة في كل فحص لتجنب الحظر
-                break 
-                
-        cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG_ERROR: {e}")
+        # استدعاء دالة الإرسال مع طباعة النتيجة
+        for u in users:
+            try:
+                result = send_text_message(u['phone'], msg)
+                print(f"DEBUG: محاولة إرسال لـ {u['phone']} - النتيجة: {result}")
+            except Exception as e:
+                print(f"DEBUG: خطأ في الإرسال لـ {u['phone']}: {e}")
+        
+        # ... (باقي كود الإضافة للقاعدة)
 
 @app.route("/")
 def home(): return render_template("chat.html")
