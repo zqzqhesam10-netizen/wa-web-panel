@@ -34,7 +34,10 @@ def send_image_message(phone, image_url, caption):
     except Exception as e:
         print(f"DEBUG: خطأ في الإرسال: {e}")
 
+
 def check_updates():
+    from bs4 import BeautifulSoup
+    import cloudscraper
     print("===== بدأ فحص التحديثات الجديدة (أول 5 فقط) =====")
     try:
         conn = db(); cur = conn.cursor()
