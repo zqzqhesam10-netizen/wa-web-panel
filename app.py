@@ -53,8 +53,8 @@ def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
     import hashlib
-    from datetime import datetime
     import requests
+    from datetime import datetime
 
     try:
         print("===== CHECK UPDATES STARTED =====")
@@ -63,69 +63,55 @@ def check_updates():
 
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
-        print("USERS COUNT:", len(users))
-
+        
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
         response = scraper.get(url, timeout=30)
-        response.encoding = "utf-8"
-
         soup = BeautifulSoup(response.text, "html.parser")
+
         sent_count = 0
         MAX_SEND = 5
         sent_numbers = set()
 
         for img in soup.find_all("img"):
-            if sent_count >= MAX_SEND:
-                break
+            if sent_count >= MAX_SEND: break
 
             title = (img.get("alt") or "").strip()
-            if not title: continue
-
             parent = img.find_parent("a")
-            if not parent: continue
+            if not title or not parent: continue
 
-            # سحب رابط الصورة الحقيقي
+            # استخراج رابط الصورة
             img_url = img.get("data-src") or img.get("data-original") or img.get("src")
-            if img_url and img_url.startswith("//"):
-                img_url = "https:" + img_url
+            if img_url and img_url.startswith("//"): img_url = "https:" + img_url
 
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
-
             cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
-            if cur.fetchone():
-                continue
+            if cur.fetchone(): continue
 
-            # النص المدمج (بدون روابط لضمان القبول)
-            caption = f"📺 {title}\n🔥 متاح الآن!"
-            print("NEW CONTENT:", title)
-
+            caption = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+            
             for user in users:
                 phone = ''.join(filter(str.isdigit, user["phone"]))
                 if phone in sent_numbers: continue
                 sent_numbers.add(phone)
 
-                try:
-                    url_api = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-                    headers = {
-                        "Authorization": f"Bearer {ACCESS_TOKEN}",
-                        "Content-Type": "application/json",
-                        "User-Agent": "Mozilla/5.0"
-                    }
+                # إرسال مدمج (صورة + نص)
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": phone,
+                    "type": "image",
+                    "image": {"link": img_url},
+                    "caption": caption
+                }
+                headers = {
+                    "Authorization": f"Bearer {ACCESS_TOKEN}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                }
 
-                    # إرسال الصورة + النص كرسالة مدمجة
-                    payload = {
-                        "messaging_product": "whatsapp",
-                        "to": phone,
-                        "type": "image",
-                        "image": {"link": img_url},
-                        "caption": caption
-                    }
-
-                    r = requests.post(url_api, headers=headers, json=payload)
-                    print(f"SEND TO {phone} | STATUS: {r.status_code}")
-                except Exception as e:
-                    print("SEND ERROR:", e)
+                r = requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
+                                  headers=headers, json=payload)
+                print(f"SENT TO {phone} | STATUS: {r.status_code}")
 
             cur.execute("INSERT INTO messages (message, phone, sender, msg_time) VALUES (%s, 'system', 'system', %s)", 
                         (uid, datetime.now().strftime("%H:%M")))
