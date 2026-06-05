@@ -35,26 +35,23 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    print("DEBUG: بدء فحص استكشافي شامل...")
-    try:
-        scraper = cloudscraper.create_scraper()
-        url = "https://tuktukhd.com/recent/"
-        res = scraper.get(url, timeout=20)
+    scraper = cloudscraper.create_scraper()
+    # طلب الصفحة مع تحديد الترميز
+    res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+    res.encoding = 'utf-8' # إجبار الترميز على UTF-8
+    soup = BeautifulSoup(res.text, 'html.parser')
+
+    # البحث عن الروابط التي لا تحتوي على التصنيفات (وهي روابط المحتوى)
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        # استثناء روابط القوائم
+        if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']):
+            continue
         
-        # طباعة محتوى الصفحة لاكتشاف أي شيء
-        soup = BeautifulSoup(res.text, 'html.parser')
-        links = soup.find_all('a', href=True)
-        
-        print(f"DEBUG: تم العثور على {len(links)} رابط في الصفحة.")
-        
-        # طباعة تفصيلية لأول 20 رابطاً
-        for i, a in enumerate(links[:20]):
-            href = a.get('href')
-            text = a.get_text(strip=True)
-            print(f"DEBUG_LINK {i}: النص: {text[:30]} | الرابط: {href}")
-            
-    except Exception as e:
-        print(f"DEBUG_ERROR: {e}")
+        # إذا كان الرابط طويلاً بما يكفي، فهو غالباً رابط حلقة أو فيلم
+        if len(href) > 35: 
+            title = a.get('title') or a.get_text(strip=True)
+            print(f"✅ محتوى مرشح: {title} | الرابط: {href}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
