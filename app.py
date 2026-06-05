@@ -84,12 +84,12 @@ def check_updates():
     print("===== بدأ فحص التحديثات الجديدة (أول 5 فقط) =====")
     try:
         conn = db(); cur = conn.cursor()
-        res.encoding = 'utf-8'
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
+        res.encoding = 'utf-8'
         res = scraper.get(url, timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
 
