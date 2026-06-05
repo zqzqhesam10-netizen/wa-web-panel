@@ -78,7 +78,7 @@ def check_updates():
             parent = img.find_parent("a")
             if not title or not parent: continue
 
-            img_url = img.get("data-src") or img.get("data-original") or img.get("src")
+            test_image_url = "https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png"
             if img_url and img_url.startswith("//"): img_url = "https:" + img_url
             proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
 
