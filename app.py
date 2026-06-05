@@ -55,35 +55,37 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
+    print("DEBUG: بدء فحص الموقع...")
+    scraper = cloudscraper.create_scraper()
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        scraper = cloudscraper.create_scraper()
-        # نستخدم الرابط الذي يعمل معك
-        url = "https://tuktukhd.com/recent/" 
-        res = scraper.get(url, timeout=30)
-        res.encoding = 'utf-8'
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # استهداف العناصر بدقة (البحث عن div.poster)
         posts = soup.select('div.poster')
+        print(f"DEBUG: تم العثور على {len(posts)} بلاطة (Poster) في الصفحة.")
+
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        for post in posts:
+        for i, post in enumerate(posts[:3]): # فحص أول 3 فقط للتجربة
             link = post.find('a', href=True)
             img = post.find('img')
             if not link or not img: continue
             
-            title = img.get('alt') or "محتوى جديد"
+            title = img.get('alt', 'بدون عنوان')
             link_url = link['href']
-            # التقاط الرابط الصحيح للصورة
-            img_url = img.get('data-src') or img.get('src')
-            if img_url.startswith('//'): img_url = 'https:' + img_url
             
-            # التحقق من عدم التكرار
+            # طباعة ما يراه البوت
+            print(f"DEBUG {i}: فحص '{title}'")
+            
             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
             if not cur.fetchone():
-                cur.execute("SELECT phone FROM users")
-                users = cur.fetchall()
-                msg = f"📺 {title}\n🔥 متاح الآن!"
+                print(f"DEBUG: المحتوى '{title}' غير موجود في القاعدة. جارٍ الإرسال...")
+                # ... [باقي كود الإرسال]
+            else:
+                print(f"DEBUG: المحتوى '{title}' موجود مسبقاً في القاعدة (تخطي).")
+        
+        cur.close(); conn.close()
+    except Exception as e:
+        print(f"DEBUG: خطأ كارثي: {e}")
                 
                 for u in users:
                     send_image_message(u['phone'], img_url, msg)
