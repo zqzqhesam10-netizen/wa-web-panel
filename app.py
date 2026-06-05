@@ -55,31 +55,59 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    print("DEBUG: بدء فحص الموقع بهوية متصفح حقيقي...")
+    from datetime import datetime
     
-    # تعريف هوية المتصفح
+    print("DEBUG: بدء فحص الموقع...")
+    scraper = cloudscraper.create_scraper()
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://tuktukhd.com/"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
     }
     
-    scraper = cloudscraper.create_scraper()
     try:
-        # إضافة الهيدرز للطلب
-        res = scraper.get("https://tuktukhd.com/recent/", headers=headers, timeout=20)
+        res = scraper.get("https://tuktukhd.com/recent/", headers=headers, timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # إذا فشل poster، سنبحث عن الوسم العام الذي يغلف الأفلام في أغلب المواقع
-        posts = soup.select('div[class*="post"], div[class*="poster"], article')
-        print(f"DEBUG: تم العثور على {len(posts)} عنصر محتمل.")
+        # البحث عن كافة الروابط التي تحتوي على صور (الأفلام)
+        items = [a for a in soup.find_all('a', href=True) if a.find('img')]
         
-        # إذا كان العدد لا يزال صفراً، سنطبع أول 200 حرف من الصفحة لنرى هل الموقع يحجبنا برسالة (Cloudflare)
-        if len(posts) == 0:
-            print(f"DEBUG: محتوى الصفحة الخام (أول 200 حرف): {res.text[:200]}")
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        for item in items:
+            img = item.find('img')
+            title = img.get('alt', '').strip()
+            link_url = item['href']
             
+            # فلترة العناوين القصيرة جداً لتجنب اللوجوهات أو الأزرار
+            if len(title) < 5: continue
+            
+            # التقاط الرابط (مع تصحيح البروتوكول)
+            img_url = img.get('data-src') or img.get('src')
+            if img_url and img_url.startswith('//'): img_url = 'https:' + img_url
+            
+            # التحقق من قاعدة البيانات
+            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+            if not cur.fetchone():
+                print(f"✅ محتوى جديد: {title}")
+                
+                # جلب المستخدمين
+                cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+                users = cur.fetchall()
+                
+                msg = f"📺 {title}\n🔥 متاح الآن!"
+                
+                # الإرسال
+                for u in users:
+                    send_image_message(u['phone'], img_url, msg)
+                
+                # التسجيل في القاعدة
+                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                            (link_url, datetime.now().strftime("%H:%M")))
+                conn.commit()
+                break # إرسال أحدث واحد فقط
+                
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG: خطأ: {e}")
+        print(f"DEBUG: خطأ في الدمج: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
