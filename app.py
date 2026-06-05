@@ -52,7 +52,6 @@ def check_updates():
 
         url = "https://tuktukhd.com/recent/"
         response = scraper.get(url, timeout=30)
-
         response.encoding = "utf-8"
 
         print("PAGE STATUS:", response.status_code)
@@ -60,17 +59,18 @@ def check_updates():
 
         soup = BeautifulSoup(response.text, "html.parser")
 
-        found_count = 0
-        new_count = 0
+        sent_count = 0
+        MAX_SEND = 5
 
         for img in soup.find_all("img"):
+
+            if sent_count >= MAX_SEND:
+                print("STOP: reached 5 messages limit")
+                break
 
             title = (img.get("alt") or "").strip()
             if not title:
                 continue
-
-            found_count += 1
-            print("FOUND:", title)
 
             parent = img.find_parent("a")
             if not parent:
@@ -78,50 +78,64 @@ def check_updates():
 
             link_url = parent.get("href")
 
-            # ID ثابت لمنع التكرار
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
 
+            # منع التكرار
             cur.execute(
                 "SELECT id FROM messages WHERE message=%s LIMIT 1",
                 (uid,)
             )
 
             if cur.fetchone():
-                print("SKIP (already sent)")
                 continue
 
-            # 🔥 إصلاح الصور (مهم جداً)
+            # 🔥 الصورة
             img_url = (
                 img.get("data-src")
                 or img.get("data-lazy-src")
-                or img.get("data-original")
                 or img.get("src")
             )
 
-            # 🔥 تنظيف الصور المكسورة
-            if not img_url or "lazy" in img_url or img_url == "":
+            # تنظيف الصور غير الآمنة
+            if not img_url or "?" in img_url or "lazy" in img_url:
                 img_url = "https://via.placeholder.com/500x750.png"
 
-            caption = f"""📺 {title}
-
-🔥 جديد الآن"""
+            caption = f"📺 {title}\n🔥 جديد الآن"
 
             print("NEW CONTENT:", title)
 
+            # إرسال لكل المستخدمين
             for user in users:
+                phone = user["phone"].replace("+", "").strip()
+
+                print("SENDING TO:", phone)
+
                 try:
-                    phone = user["phone"].replace("+", "").strip()
-
-                    print("SENDING TO:", phone)
-
-                    send_image_message(
-                        phone,
-                        img_url,
-                        caption
-                    )
-
+                    send_image_message(phone, img_url, caption)
                 except Exception as e:
                     print("SEND ERROR:", e)
+
+            # تسجيل الإرسال
+            cur.execute("""
+                INSERT INTO messages (phone, message, sender, msg_time)
+                VALUES ('system', %s, 'system', %s)
+            """, (
+                uid,
+                datetime.now().strftime("%H:%M")
+            ))
+
+            conn.commit()
+
+            sent_count += 1
+
+        print("TOTAL SENT:", sent_count)
+        print("===== CHECK UPDATES FINISHED =====")
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print("CHECK ERROR:", e)
 
             cur.execute("""
                 INSERT INTO messages (phone, message, sender, msg_time)
