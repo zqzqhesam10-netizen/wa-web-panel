@@ -11,6 +11,43 @@ PHONE_NUMBER_ID = "1171944939327803"
 VERIFY_TOKEN = "mytoken123"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+from PIL import Image
+import os
+import requests
+
+def prepare_and_upload(image_url):
+    try:
+        # 1. تحميل الصورة من الموقع
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(image_url, headers=headers, stream=True)
+        with open("temp_raw", "wb") as f:
+            for chunk in response.iter_content(1024):
+                f.write(chunk)
+        
+        # 2. تحويل الصورة إلى JPEG باستخدام Pillow
+        img = Image.open("temp_raw")
+        img = img.convert("RGB") # تحويل الصيغ (مثل WebP أو PNG) إلى RGB لضمان التوافق
+        img.save("temp_final.jpg", "JPEG")
+        
+        # 3. رفع الصورة لـ WhatsApp
+        url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/media"
+        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
+        
+        with open("temp_final.jpg", "rb") as f:
+            files = {'file': ('temp_final.jpg', f, 'image/jpeg')}
+            data = {'messaging_product': 'whatsapp', 'type': 'image/jpeg'}
+            res = requests.post(url, headers=headers, data=data, files=files)
+        
+        # تنظيف الملفات المؤقتة
+        os.remove("temp_raw")
+        os.remove("temp_final.jpg")
+        
+        return res.json().get("id")
+        
+    except Exception as e:
+        print(f"خطأ أثناء معالجة الصورة: {e}")
+        return None
+
 def db(): return psycopg2.connect(DATABASE_URL)
 
 def init_db():
@@ -20,25 +57,25 @@ def init_db():
     conn.commit(); cur.close(); conn.close()
 
 def send_image_message(phone, image_url, caption):
-    try:
-        url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-        headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone.replace('+', '').strip(),
-            "type": "image",
-            "image": {"link": image_url, "caption": caption}
-        }
-        res = requests.post(url, headers=headers, json=payload)
-        
-        # التعديل هنا: اطبع محتوى الرد لمعرفة سبب الخطأ
-        if res.status_code != 200:
-            print(f"DEBUG ERROR: {res.json()}") 
-        else:
-            print("تم الإرسال بنجاح")
-            
-    except Exception as e:
-        print(f"DEBUG: خطأ في الإرسال: {e}")
+    # الخطوة 1: الحصول على media_id باستخدام الدالة الجديدة
+    media_id = prepare_and_upload(image_url)
+    
+    if not media_id:
+        print("فشل رفع الصورة، لن يتم الإرسال.")
+        return
+
+    # الخطوة 2: الإرسال باستخدام media_id
+    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone.replace('+', '').strip(),
+        "type": "image",
+        "image": {"id": media_id, "caption": caption} # لاحظ هنا نستخدم id وليس link
+    }
+    
+    res = requests.post(url, headers=headers, json=payload)
+    print(f"DEBUG: حالة الإرسال: {res.status_code}")
 
 
 def check_updates():
