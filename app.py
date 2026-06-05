@@ -50,109 +50,41 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    import hashlib
-
+    
     try:
-        print("===== CHECK UPDATES STARTED =====")
-
+        scraper = cloudscraper.create_scraper()
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        res.encoding = 'utf-8'
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        print("USERS COUNT:", len(users))
-
-        scraper = cloudscraper.create_scraper()
-        url = "https://tuktukhd.com/recent/"
-        response = scraper.get(url, timeout=30)
-        response.encoding = "utf-8"
-
-        print("PAGE STATUS:", response.status_code)
-        print("PAGE LENGTH:", len(response.text))
-
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        sent_count = 0
-        MAX_SEND = 5
-        sent_numbers = set()  # منع التكرار في نفس الفحص
-
-        for img in soup.find_all("img"):
-            if sent_count >= MAX_SEND:
-                print("STOP: reached 5 messages limit")
-                break
-
-            title = (img.get("alt") or "").strip()
-            if not title:
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
                 continue
-
-            parent = img.find_parent("a")
-            if not parent:
-                continue
-
-            link_url = parent.get("href")
-            uid = hashlib.md5(title.encode("utf-8")).hexdigest()
-
-            # منع التكرار بناءً على UID
-            cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
-            if cur.fetchone():
-                continue
-
-            # جلب الصورة من الموقع أو استخدام رابط ثابت إذا غير صالح
-            img_url = (
-                img.get("data-src") or img.get("data-lazy-src") or img.get("src")
-            )
-            if not img_url or "?" in img_url or "lazy" in img_url or "base64" in img_url:
-                img_url = "https://via.placeholder.com/500x750.png"
-
-            caption = f"📺 {title}\n🔥 جديد الآن"
-            print("NEW CONTENT:", title)
-
-            # إرسال لكل المستخدمين (مرة واحدة لكل رقم)
-            for user in users:
-                phone = ''.join(filter(str.isdigit, user["phone"]))  # تنظيف الرقم
-                if phone in sent_numbers:
-                    continue
-                sent_numbers.add(phone)
-
-                print("SENDING TO:", phone)
-                try:
-                    # إرسال الصورة + طباعة الاستجابة
-                    url_api = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-                    payload = {
-                        "messaging_product": "whatsapp",
-                        "to": phone,
-                        "type": "image",
-                        "image": {"link": img_url, "caption": caption},
-                    }
-                    headers = {
-                        "Authorization": f"Bearer {ACCESS_TOKEN}",
-                        "Content-Type": "application/json",
-                    }
-                    r = requests.post(url_api, headers=headers, json=payload)
-                    print("STATUS:", r.status_code)
-                    print("RESPONSE:", r.text)
-                except Exception as e:
-                    print("SEND ERROR:", e)
-
-            # تسجيل الإرسال في قاعدة البيانات
-            cur.execute(
-                """
-                INSERT INTO messages (phone, message, sender, msg_time)
-                VALUES ('system', %s, 'system', %s)
-                """,
-                (uid, datetime.now().strftime("%H:%M")),
-            )
-            conn.commit()
-            sent_count += 1
-
-        print("TOTAL SENT:", sent_count)
-        print("===== CHECK UPDATES FINISHED =====")
-
+            
+            title = a.get('title') or a.get_text(strip=True)
+            
+            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+            if not cur.fetchone():
+                print(f"🚀 إرسال جديد: {title}")
+                
+                # جلب المستخدمين والإرسال (نص فقط)
+                cur.execute("SELECT phone FROM users")
+                users = cur.fetchall()
+                for u in users:
+                    # هذه هي دالة الإرسال النصي الجديدة
+                    send_text_message(u['phone'], f"📺 {title}\n\nاضغط للمشاهدة:\n{href}\n🔥 متاح الآن!")
+                
+                cur.execute("INSERT INTO messages (message) VALUES (%s)", (href,))
+                conn.commit()
+                
         cur.close()
         conn.close()
-
     except Exception as e:
-        print("CHECK ERROR:", e)
+        print(f"DEBUG_ERROR: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
