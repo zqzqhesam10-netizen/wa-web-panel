@@ -47,48 +47,42 @@ def check_updates():
         scraper = cloudscraper.create_scraper()
 
         url = "https://tuktukhd.com/recent/"
-        res = scraper.get(url, timeout=20)
-        res.raise_for_status()
+        response = scraper.get(url, timeout=30)
+        response.raise_for_status()
 
-        soup = BeautifulSoup(res.text, "html.parser")
+        soup = BeautifulSoup(response.text, "html.parser")
 
         keywords = [
             "فيلم",
             "مسلسل",
             "انمي",
+            "أنمي",
             "برنامج",
             "الحلقة",
             "موسم"
         ]
 
-        exclude_words = [
-            "الرئيسية",
-            "اتصل بنا",
-            "سياسة الخصوصية",
-            "الأقسام",
-            "التصنيفات"
-        ]
+        for img in soup.find_all("img"):
 
-        for link in soup.find_all("a", href=True):
-
-            title = link.get("title", "").strip()
+            title = (img.get("alt") or "").strip()
 
             if not title:
-                title = link.get_text(strip=True)
-
-            link_url = link.get("href")
-
-            if not title or not link_url:
                 continue
 
-            # فلترة العناوين
             if not any(word in title for word in keywords):
                 continue
 
-            if any(word in title for word in exclude_words):
+            parent_link = img.find_parent("a")
+
+            if not parent_link:
                 continue
 
-            # التحقق من عدم إرسال المحتوى سابقاً
+            link_url = parent_link.get("href")
+
+            if not link_url:
+                continue
+
+            # التحقق من عدم الإرسال سابقاً
             cur.execute(
                 "SELECT id FROM messages WHERE message=%s LIMIT 1",
                 (link_url,)
@@ -97,45 +91,23 @@ def check_updates():
             if cur.fetchone():
                 continue
 
-            print(f"✅ محتوى جديد: {title}")
-
-            # استخراج الصورة
-            img_url = None
-
-            img_tag = link.find("img")
-
-            if img_tag:
-                img_url = (
-                    img_tag.get("data-src")
-                    or img_tag.get("data-lazy-src")
-                    or img_tag.get("src")
-                )
+            img_url = (
+                img.get("data-src")
+                or img.get("data-lazy-src")
+                or img.get("src")
+            )
 
             if not img_url:
-                parent = link.parent
+                img_url = "https://via.placeholder.com/500x750.jpg"
 
-                if parent:
-                    img_tag = parent.find("img")
-
-                    if img_tag:
-                        img_url = (
-                            img_tag.get("data-src")
-                            or img_tag.get("data-lazy-src")
-                            or img_tag.get("src")
-                        )
-
-            # صورة احتياطية
-            if not img_url:
-                img_url = "https://via.placeholder.com/500x300.jpg"
+            print(f"✅ جديد: {title}")
 
             caption = f"""📺 {title}
 
-🔥 تمت إضافته حديثاً
-
-🔗 {link_url}
+🔥 تمت إضافته حديثاً على TukTukHD
 """
 
-            # إرسال الإشعار لجميع المستخدمين
+            # إرسال الإشعار للمستخدمين
             for user in users:
                 try:
                     send_image_message(
@@ -168,7 +140,7 @@ def check_updates():
         conn.close()
 
     except Exception as e:
-        print(f"❌ خطأ أثناء فحص التحديثات: {e}")
+        print(f"❌ خطأ أثناء الفحص: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
