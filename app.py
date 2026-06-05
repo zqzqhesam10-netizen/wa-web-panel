@@ -65,6 +65,7 @@ def check_updates():
     
     try:
         res = scraper.get("https://tuktukhd.com/recent/", headers=headers, timeout=30)
+        title = title.encode('latin-1').decode('utf-8', 'ignore')
         soup = BeautifulSoup(res.text, 'html.parser')
         
         # البحث عن كافة الروابط التي تحتوي على صور (الأفلام)
