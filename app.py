@@ -87,17 +87,6 @@ def check_updates():
     except Exception as e:
         print(f"DEBUG: خطأ كارثي: {e}")
                 
-                for u in users:
-                    send_image_message(u['phone'], img_url, msg)
-                
-                cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                            (link_url, datetime.now().strftime("%H:%M")))
-                conn.commit()
-                break # إرسال أحدث محتوى فقط
-        cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG: خطأ في الفحص: {e}")
-                
 @app.route("/")
 def home(): return render_template("chat.html")
 
