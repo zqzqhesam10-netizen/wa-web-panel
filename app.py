@@ -47,7 +47,7 @@ def check_updates():
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        url = "https://tuktukhd.com/recent/"
+        url = "https://asd.pics/recently/"
         res = scraper.get(url, timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
 
