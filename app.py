@@ -81,55 +81,50 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    print("===== بدأ فحص التحديثات الجديدة (أول 5 فقط) =====")
+    print("===== بدأ فحص التحديثات الجديدة =====")
     
     try:
         conn = db(); cur = conn.cursor()
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=30)
-        
-        # التعديل هنا: إجبار الـ Encoding على UTF-8
         res.encoding = 'utf-8'
-        
-        # استخدام res.text بعد ضبط الترميز الصحيح
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # استخراج أول 5 عناصر فقط
-        items = soup.find_all("a")
-        count = 0
+        # استخراج كافة الروابط ثم أخذ أول 5 فقط
+        all_links = soup.find_all("a")
+        # ملاحظة: قد تحتاج لتعديل الفلتر ليكون أكثر دقة حسب هيكل الموقع
+        top_5_items = all_links[:5] 
         
-        for item in items:
-            if count >= 5: break # إيقاف بعد الوصول لـ 5
-            
+        count = 0
+        for item in top_5_items:
             img = item.find("img")
             if img:
-                # استخدام .get() مع التأكد من معالجة النصوص بشكل صحيح
-                raw_title = item.get("title") or (img.get("alt") if img else "جديد")
-                # تنظيف النص إذا لزم الأمر
-                title = raw_title.strip()
-                
                 link_url = item.get("href")
-                img_url = img.get("data-src") or img.get("src")
                 
+                # فحص هل الرابط موجود مسبقاً في قاعدة البيانات
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
                 if not cur.fetchone():
-                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                    # الرابط جديد فعلياً
+                    title = (item.get("title") or img.get("alt") or "جديد").strip()
+                    img_url = img.get("data-src") or img.get("src")
+                    msg = f"📺 *{title}*\n🔥 متاح الآن في الاستراحة!"
                     
-                    # إرسال الرسالة
+                    # إرسال الرسالة لجميع المستخدمين
+                    cur.execute("SELECT phone FROM users")
+                    users = cur.fetchall()
                     for u in users:
                         send_image_message(u[0], img_url, msg)
                     
+                    # تسجيل أننا أرسلنا هذا الرابط
                     cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
                                 (link_url, datetime.now().strftime("%H:%M")))
                     conn.commit()
                     count += 1
         
         cur.close(); conn.close()
-        print(f"===== تم الانتهاء: تم إرسال {count} تحديث =====")
+        print(f"===== تم الانتهاء: تم إرسال {count} تحديث جديد فقط =====")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
                 
