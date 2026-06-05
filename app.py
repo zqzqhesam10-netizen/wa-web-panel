@@ -43,7 +43,6 @@ def check_updates():
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # جلب المستخدمين
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
 
@@ -59,8 +58,6 @@ def check_updates():
         print("PAGE STATUS:", response.status_code)
         print("PAGE LENGTH:", len(response.text))
 
-        response.raise_for_status()
-
         soup = BeautifulSoup(response.text, "html.parser")
 
         found_count = 0
@@ -69,7 +66,6 @@ def check_updates():
         for img in soup.find_all("img"):
 
             title = (img.get("alt") or "").strip()
-
             if not title:
                 continue
 
@@ -78,15 +74,11 @@ def check_updates():
 
             parent = img.find_parent("a")
             if not parent:
-                print("NO PARENT:", title)
                 continue
 
             link_url = parent.get("href")
-            if not link_url:
-                print("NO LINK:", title)
-                continue
 
-            # UID بدل التكرار
+            # ID ثابت لمنع التكرار
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
 
             cur.execute(
@@ -95,17 +87,20 @@ def check_updates():
             )
 
             if cur.fetchone():
-                print("ALREADY SENT:", title)
+                print("SKIP (already sent)")
                 continue
 
+            # 🔥 إصلاح الصور (مهم جداً)
             img_url = (
                 img.get("data-src")
                 or img.get("data-lazy-src")
+                or img.get("data-original")
                 or img.get("src")
             )
 
-            if not img_url:
-                img_url = "https://via.placeholder.com/500x750.jpg"
+            # 🔥 تنظيف الصور المكسورة
+            if not img_url or "lazy" in img_url or img_url == "":
+                img_url = "https://via.placeholder.com/500x750.png"
 
             caption = f"""📺 {title}
 
@@ -115,18 +110,19 @@ def check_updates():
 
             for user in users:
                 try:
-                    print("SENDING TO:", user["phone"])
+                    phone = user["phone"].replace("+", "").strip()
+
+                    print("SENDING TO:", phone)
 
                     send_image_message(
-                        user["phone"],
+                        phone,
                         img_url,
                         caption
                     )
 
                 except Exception as e:
-                    print(f"SEND FAILED {user['phone']}: {e}")
+                    print("SEND ERROR:", e)
 
-            # حفظ لمنع التكرار
             cur.execute("""
                 INSERT INTO messages (phone, message, sender, msg_time)
                 VALUES ('system', %s, 'system', %s)
