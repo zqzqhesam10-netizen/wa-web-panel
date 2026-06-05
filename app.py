@@ -41,20 +41,56 @@ def send_image_message(phone, image_url, caption):
     except: pass
 
 def check_updates():
-    # ... (نفس كود السكرابر السابق) ...
-    if not cur.fetchone():
-        print(f"🚀 إرسال جديد: {title}")
-        msg = f"📺 *{title}*\n\n{href}"
+    from bs4 import BeautifulSoup
+    import cloudscraper
+    from datetime import datetime
+    
+    scraper = cloudscraper.create_scraper()
+    try:
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        res.encoding = 'utf-8'
+        soup = BeautifulSoup(res.text, 'html.parser')
         
-        # استدعاء دالة الإرسال مع طباعة النتيجة
-        for u in users:
-            try:
-                result = send_text_message(u['phone'], msg)
-                print(f"DEBUG: محاولة إرسال لـ {u['phone']} - النتيجة: {result}")
-            except Exception as e:
-                print(f"DEBUG: خطأ في الإرسال لـ {u['phone']}: {e}")
+        # فتح اتصال قاعدة البيانات
+        conn = db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # ... (باقي كود الإضافة للقاعدة)
+        # استخراج المستخدمين
+        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+        users = cur.fetchall()
+        
+        # البحث عن روابط جديدة
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            # استبعاد القوائم
+            if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
+                continue
+            
+            title = a.get('title') or a.get_text(strip=True)
+            
+            # التحقق: هل هذا الرابط موجود سابقاً في القاعدة؟
+            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+            if not cur.fetchone():
+                print(f"🚀 إرسال جديد: {title}")
+                
+                # الإرسال للمستخدمين
+                msg = f"📺 *{title}*\n\n{href}"
+                for u in users:
+                    try:
+                        send_text_message(u['phone'], msg)
+                    except Exception as e:
+                        print(f"خطأ إرسال لـ {u['phone']}: {e}")
+                
+                # تسجيل الرابط لعدم تكراره
+                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                            (href, datetime.now().strftime("%H:%M:%S")))
+                conn.commit()
+                break # نكتفي بإرسال أحدث حلقة
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"خطأ عام: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
