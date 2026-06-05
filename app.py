@@ -78,40 +78,32 @@ def check_updates():
             parent = img.find_parent("a")
             if not title or not parent: continue
 
-            test_image_url = "https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png"
+            # تعريف img_url بقيمة افتراضية فارغة
+            img_url = img.get("data-src") or img.get("data-original") or img.get("src")
             if img_url and img_url.startswith("//"): img_url = "https:" + img_url
+            
+            # إذا لم نجد رابطاً للصورة، نتخطى هذا العنصر لتجنب الخطأ
+            if not img_url:
+                continue
+                
             proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
 
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
             cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
             if cur.fetchone(): continue
-
+            
+            # الآن نرسل بأمان
             caption = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
             print(f"تم العثور على إضافة جديدة: {title}")
             
             for user in users:
-                phone = ''.join(filter(str.isdigit, user["phone"]))
-                payload = {
-                    "messaging_product": "whatsapp",
-                    "to": phone,
-                    "type": "image",
-                    "image": {"link": proxy_img_url},
-                    "caption": caption
-                }
-                headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
-                r = requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", headers=headers, json=payload)
-                print(f"-> تم الإرسال إلى {phone} | الحالة: {r.status_code}")
+                # استخدم الدالة الموحدة التي أنشأناها للإرسال
+                send_whatsapp_message(user["phone"], caption, img_url=proxy_img_url)
 
             cur.execute("INSERT INTO messages (message, phone, sender, msg_time) VALUES (%s, 'system', 'system', %s)", 
                         (uid, datetime.now().strftime("%H:%M")))
             conn.commit()
             sent_count += 1
-
-        print(f"===== انتهى الفحص: تم إرسال {sent_count} تحديث جديد =====")
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print("خطأ في الفحص:", e)
                 
 @app.route("/")
 def home(): return render_template("chat.html")
