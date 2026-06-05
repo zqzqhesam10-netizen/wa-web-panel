@@ -56,12 +56,11 @@ def check_updates():
     import requests
     from datetime import datetime
 
+    print("===== بدأ فحص التحديثات الجديدة =====")
+    
     try:
-        print("===== بدأ فحص التحديثات الجديدة =====")
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # جلب قائمة المستخدمين
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
@@ -70,39 +69,38 @@ def check_updates():
         response = scraper.get(url, timeout=30)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # نختار أول 5 عناصر (أحدث 5 إضافات)
-        items = soup.select(".recent-posts img")[:5] # إذا فشل، جرب soup.find_all("img")[:5] فقط
-        if not items:
-            # إذا لم يجد شيئاً، ابحث في كل الصور
-            items = soup.find_all("img")[:5]
-
+        # نبحث عن كل الصور في الصفحة للتأكد من عدم ضياع أي شيء
+        items = soup.find_all("img")[:10] 
         sent_count = 0
 
         for img in items:
-            # نحاول الوصول للأب الذي يحتوي على الرابط والعنوان
-            parent = img.find_parent("a")
+            # 1. البحث عن الرابط وتحديده بوضوح
+            current_img_url = img.get("data-src") or img.get("data-original") or img.get("src")
+            if not current_img_url:
+                continue
+                
+            if current_img_url.startswith("//"):
+                current_img_url = "https:" + current_img_url
+            
+            # 2. الحصول على العنوان
             title = (img.get("alt") or "").strip()
-            
-            # إذا لم نجد عنواناً في الـ alt، نبحث عنه في الـ title الخاص بالرابط
-            if not title and parent:
-                title = parent.get("title", "تحديث جديد").strip()
-            
-            if not title or not parent: continue
-            
-            # منع التكرار
+            if not title:
+                parent = img.find_parent("a")
+                title = parent.get("title", "تحديث جديد").strip() if parent else "غير معروف"
+
+            # 3. منع التكرار
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
             cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
-            if cur.fetchone(): continue
+            if cur.fetchone():
+                continue
             
-            # إعداد النص (بدون روابط كما طلبت)
+            # 4. الإرسال
+            proxy_img_url = f"https://images.weserv.nl/?url={current_img_url}"
             caption = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
             
-            # الإرسال لجميع المستخدمين
-            proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
             for user in users:
                 send_whatsapp_message(user["phone"], caption, img_url=proxy_img_url)
-            
-            # تسجيل الإرسال في القاعدة
+
             cur.execute("INSERT INTO messages (message, phone, sender, msg_time) VALUES (%s, 'system', 'system', %s)", 
                         (uid, datetime.now().strftime("%H:%M")))
             conn.commit()
