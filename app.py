@@ -30,6 +30,12 @@ def send_image_message(phone, image_url, caption):
             "image": {"link": image_url, "caption": caption}
         }
         res = requests.post(url, headers=headers, json=payload)
+        print("IMAGE URL:", image_url)
+
+test = requests.get(image_url, timeout=20)
+
+print("IMAGE STATUS:", test.status_code)
+print("CONTENT TYPE:", test.headers.get("Content-Type"))
         print(f"DEBUG: حالة الإرسال: {res.status_code}")
     except Exception as e:
         print(f"DEBUG: خطأ في الإرسال: {e}")
