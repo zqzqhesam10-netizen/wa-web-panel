@@ -163,6 +163,20 @@ def clear_messages():
     cur.execute("DELETE FROM messages;"); conn.commit(); cur.close(); conn.close()
     return "تم الحذف"
 
+@app.route("/clear_db")
+def clear_db():
+    try:
+        conn = db()
+        cur = conn.cursor()
+        # حذف جميع المستخدمين
+        cur.execute("DELETE FROM users;")
+        conn.commit()
+        cur.close()
+        conn.close()
+        return "✅ تم حذف جميع الأرقام بنجاح! يمكنك الآن بدء استقبال مشتركين جدد."
+    except Exception as e:
+        return f"❌ حدث خطأ: {e}"
+
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET": return request.args.get("hub.challenge") if request.args.get("hub.verify_token") == VERIFY_TOKEN else "error", 403
