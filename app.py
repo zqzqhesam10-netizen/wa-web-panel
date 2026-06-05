@@ -43,20 +43,25 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    scraper = cloudscraper.create_scraper()
-    res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
-    soup = BeautifulSoup(res.text, 'html.parser')
     
-    # طباعة الكلاسات المتاحة لنرى اسم حاوية الأفلام
-    divs = soup.find_all('div')
-    for div in divs:
-        classes = div.get('class', [])
-        # ابحث عن كلاسات تبدو كأنها حاويات أفلام
-        if 'post' in str(classes) or 'poster' in str(classes) or 'item' in str(classes):
-            print(f"DEBUG: تم العثور على حاوية بكلاس: {classes}")
-            # لنتأكد هل تحتوي على صورة؟
-            if div.find('img'):
-                print(f"✅ هذه حاوية تحتوي على صورة: {classes}")
+    scraper = cloudscraper.create_scraper()
+    try:
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        # البحث عن أي رابط يحتوي على "حلقة" أو "مسلسل" في الموقع
+        links = soup.find_all('a', href=True)
+        found = False
+        for link in links:
+            if 'tuktukhd.com' in link['href'] and ('حلقة' in link.get_text() or 'مسلسل' in link.get_text()):
+                print(f"DEBUG: تم العثور على محتوى: {link.get_text().strip()} - الرابط: {link['href']}")
+                found = True
+        
+        if not found:
+            print("DEBUG: لم يتم العثور على روابط تحتوي على كلمة 'حلقة' أو 'مسلسل'. الموقع قد يتطلب تحديثاً لاستهداف كلاسات مختلفة.")
+            
+    except Exception as e:
+        print(f"DEBUG_ERROR: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
