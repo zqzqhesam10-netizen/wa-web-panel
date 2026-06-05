@@ -59,43 +59,55 @@ def check_updates():
     
     scraper = cloudscraper.create_scraper()
     try:
+        # 1. جلب الصفحة
         res = scraper.get("https://tuktukhd.com/recent/", timeout=30)
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # البحث عن كل الروابط التي تحتوي على صور (الأفلام)
-        items = soup.find_all('a', href=True)
+        # 2. استخراج العناصر
+        links = soup.find_all('a', href=True)
         
-        for item in items:
-            img = item.find('img')
-            # شرط اختيار الفيلم: يجب أن يكون رابطاً يحتوي على صورة ذات عنوان (alt)
-            if img and img.get('alt') and 'tuktukhd' in item['href']:
-                title = img['alt']
-                img_url = img.get('data-src') or img.get('src')
-                link = item['href']
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        for link in links:
+            img_tag = link.find('img') or link.find_previous('img')
+            if not img_tag:
+                continue
                 
-                # التحقق من عدم التكرار في القاعدة
-                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link,))
-                if not cur.fetchone():
-                    # إرسال الصورة للمشتركين
-                    cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-                    users = cur.fetchall()
-                    for u in users:
-                        try:
-                            send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
-                        except: pass
-                    
-                    # حفظ الرابط في القاعدة لعدم إرساله مرة أخرى
-                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                                (link, datetime.now().strftime("%H:%M:%S")))
-                    conn.commit()
-                    print(f"✅ تم إرسال الفيلم: {title}")
-                    cur.close(); conn.close()
-                    return # نكتفي بإرسال أحدث فيلم واحد فقط ونخرج
-                cur.close(); conn.close()
+            title = img_tag.get('alt', 'بدون عنوان')
+            link_url = link['href']
+            
+            # تصحيح رابط الصورة
+            img_url = img_tag.get('data-src') or img_tag.get('src')
+            if img_url and img_url.startswith('//'):
+                img_url = 'https:' + img_url
+            
+            # 3. التحقق من التكرار (باستخدام الرابط)
+            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+            if not cur.fetchone():
+                print(f"✅ محتوى جديد: {title}")
+                msg = f"📺 {title}\n🔥 متاح الآن!"
+                
+                # 4. جلب المستخدمين والإرسال
+                cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+                users = cur.fetchall()
+                
+                for u in users:
+                    try:
+                        # إرسال الصورة مع الرابط كـ Caption إذا أردت
+                        send_image_message(u['phone'], img_url, msg)
+                    except Exception as e:
+                        print(f"خطأ إرسال لـ {u['phone']}: {e}")
+                
+                # 5. حفظ في القاعدة
+                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                            (link_url, datetime.now().strftime("%H:%M")))
+                conn.commit()
+                break # نكتفي بإرسال أحدث عنصر واحد
+                
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG_ERROR: {e}")
+        print(f"DEBUG: خطأ في الدالة: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
