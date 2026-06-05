@@ -43,23 +43,50 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
+    from datetime import datetime
     
     scraper = cloudscraper.create_scraper()
     try:
-        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        # قمنا بتغيير الرابط إلى الصفحة الرئيسية لأنها تحتوي على "البلاطات" مباشرة
+        res = scraper.get("https://tuktukhd.com/", timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # البحث عن أي رابط يحتوي على "حلقة" أو "مسلسل" في الموقع
-        links = soup.find_all('a', href=True)
-        found = False
-        for link in links:
-            if 'tuktukhd.com' in link['href'] and ('حلقة' in link.get_text() or 'مسلسل' in link.get_text()):
-                print(f"DEBUG: تم العثور على محتوى: {link.get_text().strip()} - الرابط: {link['href']}")
-                found = True
+        # استهداف الحاويات التي تحمل صور الأفلام (هذا هو الكود المعتمد في هذا التصميم)
+        items = soup.select('div.poster') 
         
-        if not found:
-            print("DEBUG: لم يتم العثور على روابط تحتوي على كلمة 'حلقة' أو 'مسلسل'. الموقع قد يتطلب تحديثاً لاستهداف كلاسات مختلفة.")
+        print(f"DEBUG: تم العثور على {len(items)} بلاطة أفلام.")
+        
+        for item in items:
+            link_tag = item.find('a')
+            img_tag = item.find('img')
             
+            if link_tag and img_tag:
+                href = link_tag['href']
+                title = link_tag.get('title') or img_tag.get('alt', 'بدون عنوان')
+                img_url = img_tag.get('data-src') or img_tag.get('src')
+                
+                # فحص هل تم إرساله من قبل
+                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+                if not cur.fetchone():
+                    # الإرسال باستخدام دالتك الخاصة
+                    cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+                    users = cur.fetchall()
+                    
+                    for u in users:
+                        try:
+                            # إرسال الصورة والتعليق بدون رابط نصي
+                            send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
+                        except: pass
+                    
+                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                                (href, datetime.now().strftime("%H:%M:%S")))
+                    conn.commit()
+                    print(f"🚀 تم إرسال: {title}")
+                    cur.close(); conn.close()
+                    break # إرسال أحدث فيلم فقط
+                cur.close(); conn.close()
+                
     except Exception as e:
         print(f"DEBUG_ERROR: {e}")
                 
