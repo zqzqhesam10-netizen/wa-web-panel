@@ -56,14 +56,12 @@ def check_updates():
     import requests
     from datetime import datetime
 
-    # تعريف متغيرات محليّة آمنة
-    img_url = None 
-    
     try:
         print("===== بدأ فحص التحديثات الجديدة =====")
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-
+        
+        # جلب قائمة المستخدمين
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
@@ -72,42 +70,44 @@ def check_updates():
         response = scraper.get(url, timeout=30)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        items = soup.find_all("img")[:5] 
+        # نختار أول 5 عناصر (أحدث 5 إضافات)
+        items = soup.find_all("div", class_="post-box")[:5] # عدلنا الاستهداف ليكون أدق للموقع
         sent_count = 0
 
-        for img in items:
-            title = (img.get("alt") or "").strip()
-            parent = img.find_parent("a")
-            if not title or not parent: continue
-
-            # استخراج الرابط بشكل آمن
-            img_url = next((img.get(attr) for attr in ["data-src", "data-original", "data-lazy-src", "src"] if img.get(attr)), None)
-            if img_url and img_url.startswith("//"): img_url = "https:" + img_url
+        for item in items:
+            # استخراج العنوان
+            title_tag = item.find("h2")
+            if not title_tag: continue
+            title = title_tag.text.strip()
             
-            # إذا لم نجد صورة، نتخطى هذا العنصر فقط
-            if not img_url:
-                continue
-                
-            proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
+            # استخراج رابط الصورة
+            img_tag = item.find("img")
+            img_url = img_tag.get("data-src") or img_tag.get("src") if img_tag else None
+            if not img_url: continue
+            
+            # منع التكرار
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
-            
             cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
             if cur.fetchone(): continue
             
+            # إعداد النص (بدون روابط كما طلبت)
             caption = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-            print(f"تم العثور على إضافة جديدة: {title}")
             
+            # الإرسال لجميع المستخدمين
+            proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
             for user in users:
                 send_whatsapp_message(user["phone"], caption, img_url=proxy_img_url)
-
+            
+            # تسجيل الإرسال في القاعدة
             cur.execute("INSERT INTO messages (message, phone, sender, msg_time) VALUES (%s, 'system', 'system', %s)", 
                         (uid, datetime.now().strftime("%H:%M")))
             conn.commit()
             sent_count += 1
-
+            
         print(f"===== انتهى الفحص: تم إرسال {sent_count} تحديث جديد =====")
         cur.close()
         conn.close()
+        
     except Exception as e:
         print("خطأ في الفحص:", e)
                 
