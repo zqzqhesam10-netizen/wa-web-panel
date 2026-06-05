@@ -136,27 +136,6 @@ def check_updates():
 
     except Exception as e:
         print("CHECK ERROR:", e)
-
-            cur.execute("""
-                INSERT INTO messages (phone, message, sender, msg_time)
-                VALUES ('system', %s, 'system', %s)
-            """, (
-                uid,
-                datetime.now().strftime("%H:%M")
-            ))
-
-            conn.commit()
-            new_count += 1
-
-        print("TOTAL FOUND:", found_count)
-        print("TOTAL NEW:", new_count)
-        print("===== CHECK UPDATES FINISHED =====")
-
-        cur.close()
-        conn.close()
-
-    except Exception as e:
-        print("CHECK ERROR:", e)
                 
 @app.route("/")
 def home(): return render_template("chat.html")
