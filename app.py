@@ -43,40 +43,44 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    import time # استيراد مكتبة الوقت
     from datetime import datetime
     
     scraper = cloudscraper.create_scraper()
     try:
-        # إضافة وقت انتظار للموقع ليحمل محتواه
-        print("DEBUG: بدء الاتصال بالموقع...")
-        res = scraper.get("https://tuktukhd.com/", timeout=30)
-        time.sleep(5) 
-        
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # البحث في وسوم المقالات أو الروابط المباشرة التي تحتوي على صور
-        # جربنا poster ولم ينجح، لنجرب البحث عن أي a يحتوي على img
+        # البحث عن كل الروابط التي تحتوي على صور (الأفلام)
         items = soup.find_all('a', href=True)
         
-        found_count = 0
         for item in items:
             img = item.find('img')
-            if img and 'src' in img.attrs:
-                # إذا وجدنا رابطاً يحتوي على صورة، فهذا غالباً فيلم
-                href = item['href']
+            # شرط اختيار الفيلم: يجب أن يكون رابطاً يحتوي على صورة ذات عنوان (alt)
+            if img and img.get('alt') and 'tuktukhd' in item['href']:
+                title = img['alt']
                 img_url = img.get('data-src') or img.get('src')
-                title = img.get('alt') or "جديد"
+                link = item['href']
                 
-                # منطق التحقق والإرسال (كما في السابق...)
-                # ... (هنا نضع منطق الـ DB والإرسال)
-                found_count += 1
-                if found_count > 0: break 
-        
-        print(f"DEBUG: تم فحص الروابط، عدد العناصر المكتشفة: {len(items)}")
-        if found_count == 0:
-            print("DEBUG: لم يتم العثور على أي صور داخل الروابط. الموقع قد يحتاج مكتبة Selenium للتحميل الحقيقي.")
-            
+                # التحقق من عدم التكرار في القاعدة
+                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link,))
+                if not cur.fetchone():
+                    # إرسال الصورة للمشتركين
+                    cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+                    users = cur.fetchall()
+                    for u in users:
+                        try:
+                            send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
+                        except: pass
+                    
+                    # حفظ الرابط في القاعدة لعدم إرساله مرة أخرى
+                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                                (link, datetime.now().strftime("%H:%M:%S")))
+                    conn.commit()
+                    print(f"✅ تم إرسال الفيلم: {title}")
+                    cur.close(); conn.close()
+                    return # نكتفي بإرسال أحدث فيلم واحد فقط ونخرج
+                cur.close(); conn.close()
     except Exception as e:
         print(f"DEBUG_ERROR: {e}")
                 
