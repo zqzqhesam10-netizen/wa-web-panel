@@ -38,24 +38,43 @@ def check_updates():
     try:
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
-        res = scraper.get(url, timeout=20)
+        res = scraper.get(url, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # سنبحث عن جميع الـ div ونطبع الكلاسات الخاصة بها
-        print("DEBUG: بدأ فحص الحاويات...")
-        divs = soup.find_all('div')
-        for div in divs:
-            classes = div.get('class', [])
-            # نبحث عن الكلاسات التي قد تكون متعلقة بالبوسترات
-            if any(c in str(classes) for c in ['post', 'poster', 'item', 'card']):
-                print(f"DEBUG: تم العثور على حاوية بكلاس: {classes}")
-                # طباعة الروابط داخل هذه الحاوية لنرى هل هي ما نبحث عنه
-                links = div.find_all('a')
-                for l in links:
-                    print(f"DEBUG: وجدنا رابط داخل الكلاس {classes}: {l.get('href')}")
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+        users = cur.fetchall()
+
+        # الفكرة: البحث في كل الروابط (a) الموجودة في الصفحة
+        # واستخراج أي رابط يحتوي على بنية تلمح أنه فيلم أو حلقة
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            title = a.get('title') or a.get_text().strip()
+            
+            # فلترة دقيقة: يجب أن يحتوي الرابط على اسم النطاق وكلمة تدل على محتوى
+            if "tuktukhd.com" in href and len(title) > 10:
+                # التحقق من أن الرابط ليس من القوائم الجانبية
+                if any(keyword in href for keyword in ['-2026', 'حلقة', 'فيلم', 'episode']):
+                    
+                    # هل تم إرساله من قبل؟
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+                    if not cur.fetchone():
+                        print(f"✅ محتوى جديد تم اكتشافه: {title}")
+                        
+                        # إرسال
+                        for u in users:
+                            send_image_message(u['phone'], "https://i.imgur.com/example.jpg", f"📺 {title}\n🔗 {href}")
+                        
+                        # حفظ
+                        cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (href, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+                        # نخرج بعد إرسال أول عنصر جديد فقط لتجنب الضغط
+                        break 
         
+        cur.close(); conn.close()
     except Exception as e:
-        print(f"DEBUG_ERROR: {e}")
+        print(f"DEBUG: خطأ: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
