@@ -48,34 +48,42 @@ def check_updates():
         res = scraper.get(url, timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # استخراج العناصر (تحديث الاستهداف)
-        items = soup.find_all("div", class_="post-box")[:5]
-        print(f"DEBUG: تم العثور على {len(items)} عنصر في الصفحة") # سطر كشف المشكلة
+        # 1. طباعة كل الكلاسات الموجودة لنعرف اسم الكلاس الصحيح
+        classes = set([tag.get('class')[0] for tag in soup.find_all(class_=True)])
+        print(f"DEBUG: الكلاسات المكتشفة في الصفحة: {classes}")
+
+        # 2. استهداف عام جداً (كل الروابط التي بداخلها صورة)
+        items = soup.find_all("a")
+        found_count = 0
         
         for item in items:
-            title_tag = item.find("h2")
-            if not title_tag: continue
-            title = title_tag.text.strip()
-            
-            link_tag = item.find("a")
-            link_url = link_tag.get("href") if link_tag else title
-            
-            img_tag = item.find("img")
-            img_url = img_tag.get("data-src") or img_tag.get("src")
-            
-            # التحقق من قاعدة البيانات
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-            if not cur.fetchone():
-                msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
-                for u in users:
-                    send_image_message(u[0], img_url, msg)
+            img = item.find("img")
+            if img:
+                # هذا الجزء سيضمن أننا وجدنا شيئاً
+                title = item.get("title") or (img.get("alt") if img else "لا يوجد عنوان")
+                link_url = item.get("href")
                 
-                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                            (link_url, datetime.now().strftime("%H:%M")))
-                conn.commit()
+                # طباعة أول 5 محاولات لنعرف لماذا لا يتم الإرسال
+                if found_count < 5:
+                    print(f"DEBUG: تم فحص رابط: {title} | الرابط: {link_url}")
+                
+                # التحقق من قاعدة البيانات
+                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                if not cur.fetchone():
+                    print(f"✅ محتوى جديد: {title}")
+                    img_url = img.get("data-src") or img.get("src")
+                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                    
+                    for u in users:
+                        send_image_message(u[0], img_url, msg)
+                    
+                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                                (link_url, datetime.now().strftime("%H:%M")))
+                    conn.commit()
+                    found_count += 1
         
         cur.close(); conn.close()
-        print("===== تم الانتهاء من الفحص =====")
+        print(f"===== تم الانتهاء: تم إرسال {found_count} تحديث =====")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
                 
