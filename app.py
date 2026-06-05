@@ -35,44 +35,140 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    
+
     try:
-        scraper = cloudscraper.create_scraper()
-        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
-        res.encoding = 'utf-8'
-        soup = BeautifulSoup(res.text, 'html.parser')
-        
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
+        # جلب المستخدمين
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
+
+        scraper = cloudscraper.create_scraper()
+
+        url = "https://tuktukhd.com/recent/"
+        res = scraper.get(url, timeout=20)
+        res.raise_for_status()
+
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        keywords = [
+            "فيلم",
+            "مسلسل",
+            "انمي",
+            "برنامج",
+            "الحلقة",
+            "موسم"
+        ]
+
+        exclude_words = [
+            "الرئيسية",
+            "اتصل بنا",
+            "سياسة الخصوصية",
+            "الأقسام",
+            "التصنيفات"
+        ]
+
+        for link in soup.find_all("a", href=True):
+
+            title = link.get("title", "").strip()
+
+            if not title:
+                title = link.get_text(strip=True)
+
+            link_url = link.get("href")
+
+            if not title or not link_url:
                 continue
-            
-            title = a.get('title') or a.get_text(strip=True)
-            
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
-            if not cur.fetchone():
-                print(f"🚀 إرسال جديد: {title}")
-                
-                sub_res = scraper.get(href, timeout=10)
-                sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
-                img_tag = sub_soup.find('img', {'class': 'attachment-post-thumbnail'})
-                img_url = img_tag.get('src') if img_tag else "https://via.placeholder.com/300"
-                
-                cur.execute("SELECT phone FROM users")
-                users = cur.fetchall()
-                for u in users:
-                    send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
-                
-                cur.execute("INSERT INTO messages (message) VALUES (%s)", (href,))
-                conn.commit()
-                
+
+            # فلترة العناوين
+            if not any(word in title for word in keywords):
+                continue
+
+            if any(word in title for word in exclude_words):
+                continue
+
+            # التحقق من عدم إرسال المحتوى سابقاً
+            cur.execute(
+                "SELECT id FROM messages WHERE message=%s LIMIT 1",
+                (link_url,)
+            )
+
+            if cur.fetchone():
+                continue
+
+            print(f"✅ محتوى جديد: {title}")
+
+            # استخراج الصورة
+            img_url = None
+
+            img_tag = link.find("img")
+
+            if img_tag:
+                img_url = (
+                    img_tag.get("data-src")
+                    or img_tag.get("data-lazy-src")
+                    or img_tag.get("src")
+                )
+
+            if not img_url:
+                parent = link.parent
+
+                if parent:
+                    img_tag = parent.find("img")
+
+                    if img_tag:
+                        img_url = (
+                            img_tag.get("data-src")
+                            or img_tag.get("data-lazy-src")
+                            or img_tag.get("src")
+                        )
+
+            # صورة احتياطية
+            if not img_url:
+                img_url = "https://via.placeholder.com/500x300.jpg"
+
+            caption = f"""📺 {title}
+
+🔥 تمت إضافته حديثاً
+
+🔗 {link_url}
+"""
+
+            # إرسال الإشعار لجميع المستخدمين
+            for user in users:
+                try:
+                    send_image_message(
+                        user["phone"],
+                        img_url,
+                        caption
+                    )
+                except Exception as send_error:
+                    print(
+                        f"خطأ إرسال إلى {user['phone']}: {send_error}"
+                    )
+
+            # حفظ الرابط لمنع التكرار
+            cur.execute(
+                """
+                INSERT INTO messages
+                (phone, message, sender, msg_time)
+                VALUES
+                ('system', %s, 'system', %s)
+                """,
+                (
+                    link_url,
+                    datetime.now().strftime("%H:%M")
+                )
+            )
+
+            conn.commit()
+
         cur.close()
         conn.close()
+
     except Exception as e:
-        print(f"DEBUG_ERROR: {e}")
+        print(f"❌ خطأ أثناء فحص التحديثات: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
