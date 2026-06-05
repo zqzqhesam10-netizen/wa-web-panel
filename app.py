@@ -80,9 +80,12 @@ def check_updates():
             parent = img.find_parent("a")
             if not title or not parent: continue
 
-            # استخراج رابط الصورة
+            # 1. استخراج الرابط الأصلي
             img_url = img.get("data-src") or img.get("data-original") or img.get("src")
             if img_url and img_url.startswith("//"): img_url = "https:" + img_url
+            
+            # 2. تطبيق Proxy لضمان قبول واتساب للصورة
+            proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
 
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
             cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
@@ -95,18 +98,17 @@ def check_updates():
                 if phone in sent_numbers: continue
                 sent_numbers.add(phone)
 
-                # إرسال مدمج (صورة + نص)
+                # إرسال مدمج (صورة + نص) مع رابط الـ Proxy
                 payload = {
                     "messaging_product": "whatsapp",
                     "to": phone,
                     "type": "image",
-                    "image": {"link": img_url},
+                    "image": {"link": proxy_img_url},
                     "caption": caption
                 }
                 headers = {
                     "Authorization": f"Bearer {ACCESS_TOKEN}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    "Content-Type": "application/json"
                 }
 
                 r = requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
