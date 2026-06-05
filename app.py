@@ -35,49 +35,46 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع في موقع tuktukhd...")
+    
     try:
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users")
-        users = cur.fetchall()
-        
         scraper = cloudscraper.create_scraper()
-        # تأكد من أن الرابط هو المطلوب
         res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
-
-        # البحث الشامل عن كل روابط الصفحة
-        links = soup.find_all('a', href=True)
-        print(f"🔍 البوت: عثرت على {len(links)} رابط، جاري الفلترة...")
-
-        for link in links:
-            title = link.get('title') or link.text.strip()
-            link_url = link.get('href', '')
-            print(f"👀 فحص: '{title}' | الرابط: {link_url}")
-            
-            # شرط الفلترة: يجب أن يحتوي العنوان على كلمات بحث، والرابط يجب أن يكون حلقة
-            if title and ("مسلسل" in title or "حلقة" in title):
-                if "/series/" in link_url or "/watch/" in link_url or "episode" in link_url:
-                    
-                    # التحقق من قاعدة البيانات لمنع التكرار
-                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-                    if not cur.fetchone():
-                        print(f"✅ البوت: وجدت محتوى جديد: {title}")
-                        msg = f"📺 {title}\n🔗 المشاهدة: {link_url}"
-                        
-                        # الإرسال لجميع المستخدمين
-                        for u in users:
-                            send_text_message(u['phone'], msg)
-                        
-                        # تسجيل في قاعدة البيانات
-                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
-                                    (link_url, datetime.now().strftime("%H:%M")))
-                        conn.commit()
         
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+        users = cur.fetchall()
+
+        # استخراج الروابط
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            # تجاهل القوائم والتركيز على الروابط الطويلة (محتوى)
+            if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
+                continue
+            
+            title = a.get('title') or a.get_text(strip=True)
+            
+            # تحقق من قاعدة البيانات (هل أرسلنا هذا الرابط من قبل؟)
+            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+            if not cur.fetchone():
+                print(f"🚀 إرسال جديد: {title}")
+                
+                # رسالة للمشتركين
+                msg = f"📺 *{title}*\n\nاضغط للمشاهدة:\n{href}"
+                for u in users:
+                    send_image_message(u['phone'], img_url, msg)
+                
+                # حفظ الرابط في قاعدة البيانات
+                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                            (href, datetime.now().strftime("%H:%M:%S")))
+                conn.commit()
+                # نكتفي بإرسال أحدث حلقة واحدة في كل فحص لتجنب الحظر
+                break 
+                
         cur.close(); conn.close()
-        print("🏁 البوت: انتهت عملية الفحص بنجاح.")
-    except Exception as e: 
-        print(f"⚠️ البوت: حدث خطأ أثناء الفحص: {e}")
+    except Exception as e:
+        print(f"DEBUG_ERROR: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
