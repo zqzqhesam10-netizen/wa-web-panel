@@ -19,33 +19,25 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
-def send_image_message(phone, image_url, caption):
-    try:
-        url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
-
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone,
-            "type": "image",
-            "image": {
-                "link": image_url,
-                "caption": caption
-            }
-        }
-
-        headers = {
-            "Authorization": f"Bearer {ACCESS_TOKEN}",
-            "Content-Type": "application/json"
-        }
-
-        r = requests.post(url, headers=headers, json=payload)
-
-        # 🔥 أهم سطرين الآن
-        print("STATUS:", r.status_code)
-        print("RESPONSE:", r.text)
-
-    except Exception as e:
-        print("SEND ERROR:", e)
+def send_text_message(phone, message_body):
+    import requests
+    import json
+    
+    url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {ACCESS_TOKEN}", 
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone.replace('+', '').strip(),
+        "type": "text",
+        "text": {"body": message_body}
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    print(f"DEBUG: حالة إرسال النص: {response.status_code}")
 
 def check_updates():
     from bs4 import BeautifulSoup
