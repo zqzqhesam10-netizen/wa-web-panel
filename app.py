@@ -42,9 +42,9 @@ def check_updates():
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        conn = db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # استخراج الروابط
         for a in soup.find_all('a', href=True):
             href = a['href']
             if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
@@ -52,39 +52,25 @@ def check_updates():
             
             title = a.get('title') or a.get_text(strip=True)
             
-            # تحقق من قاعدة البيانات
             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
             if not cur.fetchone():
                 print(f"🚀 إرسال جديد: {title}")
                 
-                # جلب صورة الأنمي من صفحة الأنمي نفسها
                 sub_res = scraper.get(href, timeout=10)
                 sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
-                img_tag = sub_soup.find('img', {'class': 'attachment-post-thumbnail'}) # تأكد من الكلاس الصحيح للصورة في موقعك
+                img_tag = sub_soup.find('img', {'class': 'attachment-post-thumbnail'})
                 img_url = img_tag.get('src') if img_tag else "https://via.placeholder.com/300"
                 
-                # جلب المستخدمين والإرسال
                 cur.execute("SELECT phone FROM users")
                 users = cur.fetchall()
                 for u in users:
                     send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
                 
-                # حفظ الرابط لعدم تكرار الإرسال
                 cur.execute("INSERT INTO messages (message) VALUES (%s)", (href,))
                 conn.commit()
                 
-        cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG_ERROR: {e}")
-                
-                # حفظ الرابط في قاعدة البيانات
-                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                            (href, datetime.now().strftime("%H:%M:%S")))
-                conn.commit()
-                # نكتفي بإرسال أحدث حلقة واحدة في كل فحص لتجنب الحظر
-                break 
-                
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
     except Exception as e:
         print(f"DEBUG_ERROR: {e}")
                 
