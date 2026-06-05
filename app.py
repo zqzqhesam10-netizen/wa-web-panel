@@ -73,11 +73,13 @@ def check_updates():
             if not cur.fetchone():
                 print(f"🚀 إرسال جديد: {title}")
                 
-                # الإرسال للمستخدمين
+               # الإرسال للمستخدمين باستخدام الاسم الصحيح للدالة
                 msg = f"📺 *{title}*\n\n{href}"
                 for u in users:
                     try:
-                        send_text_message(u['phone'], msg)
+                        # تم تغيير الاسم من send_text_message إلى send_message
+                        send_message(u['phone'], msg) 
+                        print(f"DEBUG: تم الإرسال بنجاح لـ {u['phone']}")
                     except Exception as e:
                         print(f"خطأ إرسال لـ {u['phone']}: {e}")
                 
