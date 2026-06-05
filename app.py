@@ -59,52 +59,45 @@ def check_updates():
     
     print("DEBUG: بدء فحص الموقع...")
     scraper = cloudscraper.create_scraper()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
-    }
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
     
     try:
         res = scraper.get("https://tuktukhd.com/recent/", headers=headers, timeout=30)
-        title = title.encode('latin-1').decode('utf-8', 'ignore')
+        res.encoding = 'utf-8' # تأكد من الترميز هنا
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # البحث عن كافة الروابط التي تحتوي على صور (الأفلام)
         items = [a for a in soup.find_all('a', href=True) if a.find('img')]
         
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         
         for item in items:
             img = item.find('img')
-            title = img.get('alt', '').strip()
+            # تعريف title وتصحيح ترميزه هنا في بداية الحلقة
+            raw_title = img.get('alt', 'بدون عنوان')
+            title = raw_title.encode('latin-1', 'ignore').decode('utf-8', 'replace')
+            
             link_url = item['href']
             
-            # فلترة العناوين القصيرة جداً لتجنب اللوجوهات أو الأزرار
             if len(title) < 5: continue
             
-            # التقاط الرابط (مع تصحيح البروتوكول)
             img_url = img.get('data-src') or img.get('src')
             if img_url and img_url.startswith('//'): img_url = 'https:' + img_url
             
-            # التحقق من قاعدة البيانات
             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
             if not cur.fetchone():
                 print(f"✅ محتوى جديد: {title}")
                 
-                # جلب المستخدمين
                 cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
                 users = cur.fetchall()
-                
                 msg = f"📺 {title}\n🔥 متاح الآن!"
                 
-                # الإرسال
                 for u in users:
                     send_image_message(u['phone'], img_url, msg)
                 
-                # التسجيل في القاعدة
                 cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
                             (link_url, datetime.now().strftime("%H:%M")))
                 conn.commit()
-                break # إرسال أحدث واحد فقط
+                break
                 
         cur.close(); conn.close()
     except Exception as e:
