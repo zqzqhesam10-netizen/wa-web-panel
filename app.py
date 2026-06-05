@@ -19,6 +19,14 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, phone TEXT, message TEXT, sender TEXT, msg_time TEXT);")
     conn.commit(); cur.close(); conn.close()
 
+# دالة إرسال النص (للرسائل العادية)
+def send_message(phone, message):
+    try:
+        requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
+                      headers={"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"},
+                      json={"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"body": message}})
+    except: pass
+
 # دالة إرسال الصورة (جديدة)
 def send_image_message(phone, image_url, caption):
     try:
@@ -63,7 +71,7 @@ def check_updates():
                 # رسالة للمشتركين
                 msg = f"📺 *{title}*\n\nاضغط للمشاهدة:\n{href}"
                 for u in users:
-                    send_text_message(u['phone'], msg) # استخدم دالة الإرسال الخاصة بك
+                    send_image_message(u['phone'], img_url, msg)
                 
                 # حفظ الرابط في قاعدة البيانات
                 cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
