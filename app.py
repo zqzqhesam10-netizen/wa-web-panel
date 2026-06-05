@@ -63,7 +63,17 @@ def check_updates():
                 # رسالة للمشتركين
                 msg = f"📺 *{title}*\n\nاضغط للمشاهدة:\n{href}"
                 for u in users:
-                    send_image_message(u['phone'], img_url, msg)
+                   # ... داخل حلقة الـ for ...
+            img_url = img.get('data-src') or img.get('src')
+            if img_url and img_url.startswith('//'): 
+                img_url = 'https:' + img_url
+            
+            # الآن أصبح img_url معرفاً، يمكنك استخدامه:
+            if img_url:
+                cur.execute("SELECT phone FROM users")
+                for u in cur.fetchall():
+                    # تأكد من أنك تمرر img_url هنا
+                    send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
                 
                 # حفظ الرابط في قاعدة البيانات
                 cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
