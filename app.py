@@ -43,50 +43,40 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
+    import time # استيراد مكتبة الوقت
     from datetime import datetime
     
     scraper = cloudscraper.create_scraper()
     try:
-        # قمنا بتغيير الرابط إلى الصفحة الرئيسية لأنها تحتوي على "البلاطات" مباشرة
-        res = scraper.get("https://tuktukhd.com/", timeout=20)
+        # إضافة وقت انتظار للموقع ليحمل محتواه
+        print("DEBUG: بدء الاتصال بالموقع...")
+        res = scraper.get("https://tuktukhd.com/", timeout=30)
+        time.sleep(5) 
+        
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # استهداف الحاويات التي تحمل صور الأفلام (هذا هو الكود المعتمد في هذا التصميم)
-        items = soup.select('div.poster') 
+        # البحث في وسوم المقالات أو الروابط المباشرة التي تحتوي على صور
+        # جربنا poster ولم ينجح، لنجرب البحث عن أي a يحتوي على img
+        items = soup.find_all('a', href=True)
         
-        print(f"DEBUG: تم العثور على {len(items)} بلاطة أفلام.")
-        
+        found_count = 0
         for item in items:
-            link_tag = item.find('a')
-            img_tag = item.find('img')
+            img = item.find('img')
+            if img and 'src' in img.attrs:
+                # إذا وجدنا رابطاً يحتوي على صورة، فهذا غالباً فيلم
+                href = item['href']
+                img_url = img.get('data-src') or img.get('src')
+                title = img.get('alt') or "جديد"
+                
+                # منطق التحقق والإرسال (كما في السابق...)
+                # ... (هنا نضع منطق الـ DB والإرسال)
+                found_count += 1
+                if found_count > 0: break 
+        
+        print(f"DEBUG: تم فحص الروابط، عدد العناصر المكتشفة: {len(items)}")
+        if found_count == 0:
+            print("DEBUG: لم يتم العثور على أي صور داخل الروابط. الموقع قد يحتاج مكتبة Selenium للتحميل الحقيقي.")
             
-            if link_tag and img_tag:
-                href = link_tag['href']
-                title = link_tag.get('title') or img_tag.get('alt', 'بدون عنوان')
-                img_url = img_tag.get('data-src') or img_tag.get('src')
-                
-                # فحص هل تم إرساله من قبل
-                conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-                cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
-                if not cur.fetchone():
-                    # الإرسال باستخدام دالتك الخاصة
-                    cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-                    users = cur.fetchall()
-                    
-                    for u in users:
-                        try:
-                            # إرسال الصورة والتعليق بدون رابط نصي
-                            send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
-                        except: pass
-                    
-                    cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                                (href, datetime.now().strftime("%H:%M:%S")))
-                    conn.commit()
-                    print(f"🚀 تم إرسال: {title}")
-                    cur.close(); conn.close()
-                    break # إرسال أحدث فيلم فقط
-                cur.close(); conn.close()
-                
     except Exception as e:
         print(f"DEBUG_ERROR: {e}")
                 
