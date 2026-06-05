@@ -35,6 +35,8 @@ def send_image_message(phone, image_url, caption):
         print(f"DEBUG: خطأ في الإرسال: {e}")
     
 def check_updates():
+    from bs4 import BeautifulSoup
+    import cloudscraper
     print("===== بدأ فحص التحديثات الجديدة =====")
     try:
         conn = db(); cur = conn.cursor()
@@ -122,8 +124,8 @@ import subprocess
 @app.route("/api/force_check", methods=["GET", "POST"])
 def force_check():
     # تشغيل الفحص
-    subprocess.Popen(["python3", "-c", "from app import check_updates; check_updates()"])
-    return jsonify({"status": "Started as background process"})
+    subprocess.Popen([sys.executable, "-c", "from app import check_updates; check_updates()"])
+    return jsonify({"status": "Started"})
 
 @app.route("/api/test_send")
 def test_send():
