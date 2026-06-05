@@ -35,6 +35,7 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
+    import hashlib
 
     try:
         print("===== CHECK UPDATES STARTED =====")
@@ -42,15 +43,17 @@ def check_updates():
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
+        # جلب المستخدمين
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
 
-        print(f"USERS COUNT: {len(users)}")
+        print("USERS COUNT:", len(users))
 
         scraper = cloudscraper.create_scraper()
 
         url = "https://tuktukhd.com/recent/"
         response = scraper.get(url, timeout=30)
+
         response.encoding = "utf-8"
 
         print("PAGE STATUS:", response.status_code)
@@ -63,15 +66,6 @@ def check_updates():
         found_count = 0
         new_count = 0
 
-        keywords = [
-            "فيلم",
-            "مسلسل",
-            "انمي",
-            "أنمي",
-            "الحلقة",
-            "موسم"
-        ]
-
         for img in soup.find_all("img"):
 
             title = (img.get("alt") or "").strip()
@@ -82,28 +76,26 @@ def check_updates():
             found_count += 1
             print("FOUND:", title)
 
-            if not any(word in title for word in keywords):
+            parent = img.find_parent("a")
+            if not parent:
+                print("NO PARENT:", title)
                 continue
 
-            parent_link = img.find_parent("a")
-
-            if not parent_link:
-                print("NO PARENT LINK:", title)
-                continue
-
-            link_url = parent_link.get("href")
-
+            link_url = parent.get("href")
             if not link_url:
-                print("NO URL:", title)
+                print("NO LINK:", title)
                 continue
+
+            # UID بدل التكرار
+            uid = hashlib.md5(title.encode("utf-8")).hexdigest()
 
             cur.execute(
                 "SELECT id FROM messages WHERE message=%s LIMIT 1",
-                (link_url,)
+                (uid,)
             )
 
             if cur.fetchone():
-                print("ALREADY EXISTS:", title)
+                print("ALREADY SENT:", title)
                 continue
 
             img_url = (
@@ -112,48 +104,49 @@ def check_updates():
                 or img.get("src")
             )
 
-            print("NEW CONTENT:", title)
+            if not img_url:
+                img_url = "https://via.placeholder.com/500x750.jpg"
 
-            caption = f"📺 {title}\n\n🔥 تمت إضافته حديثاً"
+            caption = f"""📺 {title}
+
+🔥 جديد الآن"""
+
+            print("NEW CONTENT:", title)
 
             for user in users:
                 try:
+                    print("SENDING TO:", user["phone"])
+
                     send_image_message(
                         user["phone"],
                         img_url,
                         caption
                     )
-                except Exception as send_error:
-                    print(
-                        f"SEND ERROR {user['phone']}: {send_error}"
-                    )
 
-            cur.execute(
-                """
-                INSERT INTO messages
-                (phone,message,sender,msg_time)
-                VALUES
-                ('system',%s,'system',%s)
-                """,
-                (
-                    link_url,
-                    datetime.now().strftime("%H:%M")
-                )
-            )
+                except Exception as e:
+                    print(f"SEND FAILED {user['phone']}: {e}")
+
+            # حفظ لمنع التكرار
+            cur.execute("""
+                INSERT INTO messages (phone, message, sender, msg_time)
+                VALUES ('system', %s, 'system', %s)
+            """, (
+                uid,
+                datetime.now().strftime("%H:%M")
+            ))
 
             conn.commit()
             new_count += 1
 
-        print("TOTAL IMAGES FOUND:", found_count)
-        print("TOTAL NEW ITEMS:", new_count)
+        print("TOTAL FOUND:", found_count)
+        print("TOTAL NEW:", new_count)
+        print("===== CHECK UPDATES FINISHED =====")
 
         cur.close()
         conn.close()
 
-        print("===== CHECK UPDATES FINISHED =====")
-
     except Exception as e:
-        print(f"CHECK_UPDATES_ERROR: {e}")
+        print("CHECK ERROR:", e)
                 
 @app.route("/")
 def home(): return render_template("chat.html")
