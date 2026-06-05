@@ -89,7 +89,6 @@ def check_updates():
         
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
-        res.encoding = 'utf-8'
         res = scraper.get(url, timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
 
