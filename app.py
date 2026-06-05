@@ -82,6 +82,7 @@ def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
     print("===== بدأ فحص التحديثات الجديدة (أول 5 فقط) =====")
+    
     try:
         conn = db(); cur = conn.cursor()
         cur.execute("SELECT phone FROM users")
@@ -90,6 +91,11 @@ def check_updates():
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=30)
+        
+        # التعديل هنا: إجبار الـ Encoding على UTF-8
+        res.encoding = 'utf-8'
+        
+        # استخدام res.text بعد ضبط الترميز الصحيح
         soup = BeautifulSoup(res.text, 'html.parser')
 
         # استخراج أول 5 عناصر فقط
@@ -101,13 +107,19 @@ def check_updates():
             
             img = item.find("img")
             if img:
-                title = item.get("title") or (img.get("alt") if img else "جديد")
+                # استخدام .get() مع التأكد من معالجة النصوص بشكل صحيح
+                raw_title = item.get("title") or (img.get("alt") if img else "جديد")
+                # تنظيف النص إذا لزم الأمر
+                title = raw_title.strip()
+                
                 link_url = item.get("href")
                 img_url = img.get("data-src") or img.get("src")
                 
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
                 if not cur.fetchone():
                     msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                    
+                    # إرسال الرسالة
                     for u in users:
                         send_image_message(u[0], img_url, msg)
                     
