@@ -55,37 +55,31 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    print("DEBUG: بدء فحص الموقع...")
+    print("DEBUG: بدء فحص الموقع بهوية متصفح حقيقي...")
+    
+    # تعريف هوية المتصفح
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://tuktukhd.com/"
+    }
+    
     scraper = cloudscraper.create_scraper()
     try:
-        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        # إضافة الهيدرز للطلب
+        res = scraper.get("https://tuktukhd.com/recent/", headers=headers, timeout=20)
         soup = BeautifulSoup(res.text, 'html.parser')
-        posts = soup.select('div.poster')
-        print(f"DEBUG: تم العثور على {len(posts)} بلاطة (Poster) في الصفحة.")
-
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        for i, post in enumerate(posts[:3]): # فحص أول 3 فقط للتجربة
-            link = post.find('a', href=True)
-            img = post.find('img')
-            if not link or not img: continue
-            
-            title = img.get('alt', 'بدون عنوان')
-            link_url = link['href']
-            
-            # طباعة ما يراه البوت
-            print(f"DEBUG {i}: فحص '{title}'")
-            
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-            if not cur.fetchone():
-                print(f"DEBUG: المحتوى '{title}' غير موجود في القاعدة. جارٍ الإرسال...")
-                # ... [باقي كود الإرسال]
-            else:
-                print(f"DEBUG: المحتوى '{title}' موجود مسبقاً في القاعدة (تخطي).")
+        # إذا فشل poster، سنبحث عن الوسم العام الذي يغلف الأفلام في أغلب المواقع
+        posts = soup.select('div[class*="post"], div[class*="poster"], article')
+        print(f"DEBUG: تم العثور على {len(posts)} عنصر محتمل.")
         
-        cur.close(); conn.close()
+        # إذا كان العدد لا يزال صفراً، سنطبع أول 200 حرف من الصفحة لنرى هل الموقع يحجبنا برسالة (Cloudflare)
+        if len(posts) == 0:
+            print(f"DEBUG: محتوى الصفحة الخام (أول 200 حرف): {res.text[:200]}")
+            
     except Exception as e:
-        print(f"DEBUG: خطأ كارثي: {e}")
+        print(f"DEBUG: خطأ: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
