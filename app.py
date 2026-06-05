@@ -43,56 +43,21 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    from datetime import datetime
-    
     scraper = cloudscraper.create_scraper()
-    try:
-        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
-        res.encoding = 'utf-8'
-        soup = BeautifulSoup(res.text, 'html.parser')
-        
-        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-        users = cur.fetchall()
-        
-        # البحث عن الحاويات التي تحتوي على الصور والروابط
-        # الموقع يستخدم div بكلاس 'poster' كما رأينا في الصورة الأولى
-        posts = soup.select('div.poster') 
-        
-        for post in posts:
-            link_tag = post.find('a')
-            img_tag = post.find('img')
-            
-            if not link_tag or not img_tag:
-                continue
+    res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+    soup = BeautifulSoup(res.text, 'html.parser')
+    
+    # طباعة الكلاسات المتاحة لنرى اسم حاوية الأفلام
+    divs = soup.find_all('div')
+    for div in divs:
+        classes = div.get('class', [])
+        # ابحث عن كلاسات تبدو كأنها حاويات أفلام
+        if 'post' in str(classes) or 'poster' in str(classes) or 'item' in str(classes):
+            print(f"DEBUG: تم العثور على حاوية بكلاس: {classes}")
+            # لنتأكد هل تحتوي على صورة؟
+            if div.find('img'):
+                print(f"✅ هذه حاوية تحتوي على صورة: {classes}")
                 
-            href = link_tag['href']
-            title = link_tag.get('title') or link_tag.get_text(strip=True)
-            img_url = img_tag.get('data-src') or img_tag.get('src')
-            
-            # التحقق من قاعدة البيانات
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
-            if not cur.fetchone():
-                print(f"🚀 إرسال صورة جديد: {title}")
-                
-                # إرسال الصورة بدلاً من الرابط
-                for u in users:
-                    try:
-                        # إرسال الصورة مع العنوان كـ caption
-                        send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن للمشاهدة!")
-                    except Exception as e:
-                        print(f"خطأ إرسال صورة لـ {u['phone']}: {e}")
-                
-                # تسجيل في القاعدة
-                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                            (href, datetime.now().strftime("%H:%M:%S")))
-                conn.commit()
-                break # نكتفي بأول عنصر جديد
-        
-        cur.close(); conn.close()
-    except Exception as e:
-        print(f"خطأ عام: {e}")
-
 @app.route("/")
 def home(): return render_template("chat.html")
 
