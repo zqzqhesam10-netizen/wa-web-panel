@@ -35,23 +35,46 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    scraper = cloudscraper.create_scraper()
-    # طلب الصفحة مع تحديد الترميز
-    res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
-    res.encoding = 'utf-8' # إجبار الترميز على UTF-8
-    soup = BeautifulSoup(res.text, 'html.parser')
-
-    # البحث عن الروابط التي لا تحتوي على التصنيفات (وهي روابط المحتوى)
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        # استثناء روابط القوائم
-        if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']):
-            continue
+    
+    try:
+        scraper = cloudscraper.create_scraper()
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        res.encoding = 'utf-8'
+        soup = BeautifulSoup(res.text, 'html.parser')
         
-        # إذا كان الرابط طويلاً بما يكفي، فهو غالباً رابط حلقة أو فيلم
-        if len(href) > 35: 
+        conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
+        users = cur.fetchall()
+
+        # استخراج الروابط
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            # تجاهل القوائم والتركيز على الروابط الطويلة (محتوى)
+            if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
+                continue
+            
             title = a.get('title') or a.get_text(strip=True)
-            print(f"✅ محتوى مرشح: {title} | الرابط: {href}")
+            
+            # تحقق من قاعدة البيانات (هل أرسلنا هذا الرابط من قبل؟)
+            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
+            if not cur.fetchone():
+                print(f"🚀 إرسال جديد: {title}")
+                
+                # رسالة للمشتركين
+                msg = f"📺 *{title}*\n\nاضغط للمشاهدة:\n{href}"
+                for u in users:
+                    send_text_message(u['phone'], msg) # استخدم دالة الإرسال الخاصة بك
+                
+                # حفظ الرابط في قاعدة البيانات
+                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
+                            (href, datetime.now().strftime("%H:%M:%S")))
+                conn.commit()
+                # نكتفي بإرسال أحدث حلقة واحدة في كل فحص لتجنب الحظر
+                break 
+                
+        cur.close(); conn.close()
+    except Exception as e:
+        print(f"DEBUG_ERROR: {e}")
 
 @app.route("/")
 def home(): return render_template("chat.html")
