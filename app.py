@@ -71,19 +71,23 @@ def check_updates():
         soup = BeautifulSoup(response.text, "html.parser")
 
         # نختار أول 5 عناصر (أحدث 5 إضافات)
-        items = soup.find_all("div", class_="post-box")[:5] # عدلنا الاستهداف ليكون أدق للموقع
+       items = soup.select(".recent-posts img")[:5] # إذا فشل، جرب soup.find_all("img")[:5] فقط
+        if not items:
+            # إذا لم يجد شيئاً، ابحث في كل الصور
+            items = soup.find_all("img")[:5]
+
         sent_count = 0
 
-        for item in items:
-            # استخراج العنوان
-            title_tag = item.find("h2")
-            if not title_tag: continue
-            title = title_tag.text.strip()
+        for img in items:
+            # نحاول الوصول للأب الذي يحتوي على الرابط والعنوان
+            parent = img.find_parent("a")
+            title = (img.get("alt") or "").strip()
             
-            # استخراج رابط الصورة
-            img_tag = item.find("img")
-            img_url = img_tag.get("data-src") or img_tag.get("src") if img_tag else None
-            if not img_url: continue
+            # إذا لم نجد عنواناً في الـ alt، نبحث عنه في الـ title الخاص بالرابط
+            if not title and parent:
+                title = parent.get("title", "تحديث جديد").strip()
+            
+            if not title or not parent: continue
             
             # منع التكرار
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
