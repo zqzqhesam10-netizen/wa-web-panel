@@ -58,12 +58,14 @@ def check_updates():
 
     try:
         print("===== بدأ فحص التحديثات الجديدة =====")
+        
+        # 1. الاتصال بقاعدة البيانات
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
+        # 2. سحب البيانات من الموقع
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
         response = scraper.get(url, timeout=30)
@@ -78,32 +80,37 @@ def check_updates():
             parent = img.find_parent("a")
             if not title or not parent: continue
 
-            # تعريف img_url بقيمة افتراضية فارغة
+            # استخراج الرابط وتجهيزه عبر الـ Proxy لتجاوز حظر واتساب
             img_url = img.get("data-src") or img.get("data-original") or img.get("src")
             if img_url and img_url.startswith("//"): img_url = "https:" + img_url
-            
-            # إذا لم نجد رابطاً للصورة، نتخطى هذا العنصر لتجنب الخطأ
-            if not img_url:
-                continue
+            if not img_url: continue
                 
             proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
 
+            # 3. منع التكرار
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
             cur.execute("SELECT id FROM messages WHERE message=%s LIMIT 1", (uid,))
             if cur.fetchone(): continue
             
-            # الآن نرسل بأمان
             caption = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
             print(f"تم العثور على إضافة جديدة: {title}")
             
+            # 4. الإرسال لكل المستخدمين
             for user in users:
-                # استخدم الدالة الموحدة التي أنشأناها للإرسال
                 send_whatsapp_message(user["phone"], caption, img_url=proxy_img_url)
 
+            # 5. تسجيل العملية في قاعدة البيانات
             cur.execute("INSERT INTO messages (message, phone, sender, msg_time) VALUES (%s, 'system', 'system', %s)", 
                         (uid, datetime.now().strftime("%H:%M")))
             conn.commit()
             sent_count += 1
+
+        print(f"===== انتهى الفحص: تم إرسال {sent_count} تحديث جديد =====")
+        cur.close()
+        conn.close()
+        
+    except Exception as e:
+        print("خطأ في الفحص:", e)
                 
 @app.route("/")
 def home(): return render_template("chat.html")
