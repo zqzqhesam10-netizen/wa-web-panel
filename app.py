@@ -35,53 +35,49 @@ def send_image_message(phone, image_url, caption):
 def check_updates():
     from bs4 import BeautifulSoup
     import cloudscraper
-    from datetime import datetime
-    
-    print("DEBUG: بدء فحص الموقع...")
-    scraper = cloudscraper.create_scraper()
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"}
-    
+    print("🕵️‍♂️ البوت: بدأت مهمة الاستطلاع في موقع tuktukhd...")
     try:
-        res = scraper.get("https://tuktukhd.com/recent/", headers=headers, timeout=30)
-        res.encoding = 'utf-8' # تأكد من الترميز هنا
-        soup = BeautifulSoup(res.text, 'html.parser')
-        
-        items = [a for a in soup.find_all('a', href=True) if a.find('img')]
-        
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT phone FROM users")
+        users = cur.fetchall()
         
-        for item in items:
-            img = item.find('img')
-            # تعريف title وتصحيح ترميزه هنا في بداية الحلقة
-            raw_title = img.get('alt', 'بدون عنوان')
-            title = raw_title.encode('latin-1', 'ignore').decode('utf-8', 'replace')
+        scraper = cloudscraper.create_scraper()
+        # تأكد من أن الرابط هو المطلوب
+        res = scraper.get("https://tuktukhd.com/recent/", timeout=20)
+        soup = BeautifulSoup(res.text, 'html.parser')
+
+        # البحث الشامل عن كل روابط الصفحة
+        links = soup.find_all('a', href=True)
+        print(f"🔍 البوت: عثرت على {len(links)} رابط، جاري الفلترة...")
+
+        for link in links:
+            title = link.get('title') or link.text.strip()
+            link_url = link.get('href', '')
+            print(f"👀 فحص: '{title}' | الرابط: {link_url}")
             
-            link_url = item['href']
-            
-            if len(title) < 5: continue
-            
-            img_url = img.get('data-src') or img.get('src')
-            if img_url and img_url.startswith('//'): img_url = 'https:' + img_url
-            
-            cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-            if not cur.fetchone():
-                print(f"✅ محتوى جديد: {title}")
-                
-                cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-                users = cur.fetchall()
-                msg = f"📺 {title}\n🔥 متاح الآن!"
-                
-                for u in users:
-                    send_image_message(u['phone'], img_url, msg)
-                
-                cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
-                            (link_url, datetime.now().strftime("%H:%M")))
-                conn.commit()
-                break
-                
+            # شرط الفلترة: يجب أن يحتوي العنوان على كلمات بحث، والرابط يجب أن يكون حلقة
+            if title and ("مسلسل" in title or "حلقة" in title):
+                if "/series/" in link_url or "/watch/" in link_url or "episode" in link_url:
+                    
+                    # التحقق من قاعدة البيانات لمنع التكرار
+                    cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                    if not cur.fetchone():
+                        print(f"✅ البوت: وجدت محتوى جديد: {title}")
+                        msg = f"📺 {title}\n🔗 المشاهدة: {link_url}"
+                        
+                        # الإرسال لجميع المستخدمين
+                        for u in users:
+                            send_text_message(u['phone'], msg)
+                        
+                        # تسجيل في قاعدة البيانات
+                        cur.execute("INSERT INTO messages(phone,message,sender,msg_time) VALUES('system', %s, 'system', %s)", 
+                                    (link_url, datetime.now().strftime("%H:%M")))
+                        conn.commit()
+        
         cur.close(); conn.close()
-    except Exception as e:
-        print(f"DEBUG: خطأ في الدمج: {e}")
+        print("🏁 البوت: انتهت عملية الفحص بنجاح.")
+    except Exception as e: 
+        print(f"⚠️ البوت: حدث خطأ أثناء الفحص: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
