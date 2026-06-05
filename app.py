@@ -29,29 +29,28 @@ def send_message(phone, message):
 
 # ... (بداية الملف) ...
 
-# الدالة الجديدة والمعدلة
 def send_image_message(phone, image_url, caption):
-    # إزالة أي علامة + قد تكون موجودة في قاعدة البيانات
+    # إزالة علامة + وضمان خلو الرقم من أي مسافات
     clean_phone = phone.replace('+', '').strip()
-        
+    
+    # استخدام البروكسي لضمان وصول الصورة وتجاوز حماية الموقع
+    proxy_url = f"https://images.weserv.nl/?url={image_url.replace('https:', '').replace('http:', '')}"
+    
     url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
     headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
     
     payload = {
         "messaging_product": "whatsapp",
-        "to": clean_phone,  # إرسال الرقم بدون علامة +
+        "to": clean_phone,
         "type": "image",
-        "image": {"link": image_url, "caption": caption}
+        "image": {"link": proxy_url, "caption": caption}
     }
     
-    response = requests.post(url, headers=headers, json=payload)
-    print(f"DEBUG: محاولة إرسال للرقم {clean_phone} - حالة: {response.status_code}")
-
-# ... (باقي كود التطبيق مثل check_updates و @app.route) ...
-        
-    # ابحث عن السطر 52، واجعله هكذا تماماً:
-        except Exception: 
-            pass
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        print(f"DEBUG: محاولة إرسال للرقم {clean_phone} - حالة: {response.status_code}")
+    except Exception as e:
+        print(f"DEBUG: خطأ في إرسال الصورة: {e}")
 
 def check_updates():
     from bs4 import BeautifulSoup
