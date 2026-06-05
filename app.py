@@ -51,6 +51,7 @@ def check_updates():
 
         url = "https://tuktukhd.com/recent/"
         response = scraper.get(url, timeout=30)
+        response.encoding = "utf-8"
 
         print("PAGE STATUS:", response.status_code)
         print("PAGE LENGTH:", len(response.text))
