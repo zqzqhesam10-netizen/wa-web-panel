@@ -57,7 +57,7 @@ def check_updates():
     from datetime import datetime
 
     try:
-        print("===== CHECK UPDATES STARTED =====")
+        print("===== بدأ فحص التحديثات الجديدة =====")
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -69,22 +69,17 @@ def check_updates():
         response = scraper.get(url, timeout=30)
         soup = BeautifulSoup(response.text, "html.parser")
 
+        # نأخذ فقط أول 5 عناصر (أحدث إضافات)
+        items = soup.find_all("img")[:5] 
         sent_count = 0
-        MAX_SEND = 5
-        sent_numbers = set()
 
-        for img in soup.find_all("img"):
-            if sent_count >= MAX_SEND: break
-
+        for img in items:
             title = (img.get("alt") or "").strip()
             parent = img.find_parent("a")
             if not title or not parent: continue
 
-            # 1. استخراج الرابط الأصلي
             img_url = img.get("data-src") or img.get("data-original") or img.get("src")
             if img_url and img_url.startswith("//"): img_url = "https:" + img_url
-            
-            # 2. تطبيق Proxy لضمان قبول واتساب للصورة
             proxy_img_url = f"https://images.weserv.nl/?url={img_url}"
 
             uid = hashlib.md5(title.encode("utf-8")).hexdigest()
@@ -92,13 +87,10 @@ def check_updates():
             if cur.fetchone(): continue
 
             caption = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+            print(f"تم العثور على إضافة جديدة: {title}")
             
             for user in users:
                 phone = ''.join(filter(str.isdigit, user["phone"]))
-                if phone in sent_numbers: continue
-                sent_numbers.add(phone)
-
-                # إرسال مدمج (صورة + نص) مع رابط الـ Proxy
                 payload = {
                     "messaging_product": "whatsapp",
                     "to": phone,
@@ -106,24 +98,20 @@ def check_updates():
                     "image": {"link": proxy_img_url},
                     "caption": caption
                 }
-                headers = {
-                    "Authorization": f"Bearer {ACCESS_TOKEN}",
-                    "Content-Type": "application/json"
-                }
-
-                r = requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", 
-                                  headers=headers, json=payload)
-                print(f"SENT TO {phone} | STATUS: {r.status_code}")
+                headers = {"Authorization": f"Bearer {ACCESS_TOKEN}", "Content-Type": "application/json"}
+                r = requests.post(f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages", headers=headers, json=payload)
+                print(f"-> تم الإرسال إلى {phone} | الحالة: {r.status_code}")
 
             cur.execute("INSERT INTO messages (message, phone, sender, msg_time) VALUES (%s, 'system', 'system', %s)", 
                         (uid, datetime.now().strftime("%H:%M")))
             conn.commit()
             sent_count += 1
 
+        print(f"===== انتهى الفحص: تم إرسال {sent_count} تحديث جديد =====")
         cur.close()
         conn.close()
     except Exception as e:
-        print("CHECK ERROR:", e)
+        print("خطأ في الفحص:", e)
                 
 @app.route("/")
 def home(): return render_template("chat.html")
