@@ -6,3 +6,4 @@ flask-socketio
 psycopg2-binary
 apscheduler
 lxml
+Pillow
