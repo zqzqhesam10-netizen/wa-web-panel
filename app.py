@@ -43,37 +43,39 @@ def check_updates():
         soup = BeautifulSoup(res.text, 'html.parser')
         
         conn = db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT phone FROM users WHERE phone LIKE '+%'")
-        users = cur.fetchall()
 
         # استخراج الروابط
         for a in soup.find_all('a', href=True):
             href = a['href']
-            # تجاهل القوائم والتركيز على الروابط الطويلة (محتوى)
             if any(x in href for x in ['category', 'sercat', 'channel', '/recent/']) or len(href) < 35:
                 continue
             
             title = a.get('title') or a.get_text(strip=True)
             
-            # تحقق من قاعدة البيانات (هل أرسلنا هذا الرابط من قبل؟)
+            # تحقق من قاعدة البيانات
             cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (href,))
             if not cur.fetchone():
                 print(f"🚀 إرسال جديد: {title}")
                 
-                # رسالة للمشتركين
-                msg = f"📺 *{title}*\n\nاضغط للمشاهدة:\n{href}"
-                for u in users:
-                   # ... داخل حلقة الـ for ...
-            img_url = img.get('data-src') or img.get('src')
-            if img_url and img_url.startswith('//'): 
-                img_url = 'https:' + img_url
-            
-            # الآن أصبح img_url معرفاً، يمكنك استخدامه:
-            if img_url:
+                # جلب صورة الأنمي من صفحة الأنمي نفسها
+                sub_res = scraper.get(href, timeout=10)
+                sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
+                img_tag = sub_soup.find('img', {'class': 'attachment-post-thumbnail'}) # تأكد من الكلاس الصحيح للصورة في موقعك
+                img_url = img_tag.get('src') if img_tag else "https://via.placeholder.com/300"
+                
+                # جلب المستخدمين والإرسال
                 cur.execute("SELECT phone FROM users")
-                for u in cur.fetchall():
-                    # تأكد من أنك تمرر img_url هنا
+                users = cur.fetchall()
+                for u in users:
                     send_image_message(u['phone'], img_url, f"📺 {title}\n🔥 متاح الآن!")
+                
+                # حفظ الرابط لعدم تكرار الإرسال
+                cur.execute("INSERT INTO messages (message) VALUES (%s)", (href,))
+                conn.commit()
+                
+        cur.close(); conn.close()
+    except Exception as e:
+        print(f"DEBUG_ERROR: {e}")
                 
                 # حفظ الرابط في قاعدة البيانات
                 cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
