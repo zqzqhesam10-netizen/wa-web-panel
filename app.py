@@ -30,9 +30,13 @@ def send_image_message(phone, image_url, caption):
             "image": {"link": image_url, "caption": caption}
         }
         res = requests.post(url, headers=headers, json=payload)
-        print("IMAGE URL:", image_url)
-
-        print(f"DEBUG: حالة الإرسال: {res.status_code}")
+        
+        # التعديل هنا: اطبع محتوى الرد لمعرفة سبب الخطأ
+        if res.status_code != 200:
+            print(f"DEBUG ERROR: {res.json()}") 
+        else:
+            print("تم الإرسال بنجاح")
+            
     except Exception as e:
         print(f"DEBUG: خطأ في الإرسال: {e}")
 
@@ -47,7 +51,7 @@ def check_updates():
         users = cur.fetchall()
         
         scraper = cloudscraper.create_scraper()
-        url = "https://asd.pics/recently/"
+        url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=30)
         soup = BeautifulSoup(res.text, 'html.parser')
 
