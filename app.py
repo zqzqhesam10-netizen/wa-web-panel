@@ -84,6 +84,7 @@ def check_updates():
     print("===== بدأ فحص التحديثات الجديدة (أول 5 فقط) =====")
     try:
         conn = db(); cur = conn.cursor()
+        res.encoding = 'utf-8'
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
         
