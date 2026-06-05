@@ -71,7 +71,7 @@ def check_updates():
         soup = BeautifulSoup(response.text, "html.parser")
 
         # نختار أول 5 عناصر (أحدث 5 إضافات)
-       items = soup.select(".recent-posts img")[:5] # إذا فشل، جرب soup.find_all("img")[:5] فقط
+        items = soup.select(".recent-posts img")[:5] # إذا فشل، جرب soup.find_all("img")[:5] فقط
         if not items:
             # إذا لم يجد شيئاً، ابحث في كل الصور
             items = soup.find_all("img")[:5]
