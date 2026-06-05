@@ -37,27 +37,36 @@ def check_updates():
     import cloudscraper
 
     try:
+        print("===== CHECK UPDATES STARTED =====")
+
         conn = db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # جلب المستخدمين
         cur.execute("SELECT phone FROM users")
         users = cur.fetchall()
+
+        print(f"USERS COUNT: {len(users)}")
 
         scraper = cloudscraper.create_scraper()
 
         url = "https://tuktukhd.com/recent/"
         response = scraper.get(url, timeout=30)
+
+        print("PAGE STATUS:", response.status_code)
+        print("PAGE LENGTH:", len(response.text))
+
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
+
+        found_count = 0
+        new_count = 0
 
         keywords = [
             "فيلم",
             "مسلسل",
             "انمي",
             "أنمي",
-            "برنامج",
             "الحلقة",
             "موسم"
         ]
@@ -69,26 +78,31 @@ def check_updates():
             if not title:
                 continue
 
+            found_count += 1
+            print("FOUND:", title)
+
             if not any(word in title for word in keywords):
                 continue
 
             parent_link = img.find_parent("a")
 
             if not parent_link:
+                print("NO PARENT LINK:", title)
                 continue
 
             link_url = parent_link.get("href")
 
             if not link_url:
+                print("NO URL:", title)
                 continue
 
-            # التحقق من عدم الإرسال سابقاً
             cur.execute(
                 "SELECT id FROM messages WHERE message=%s LIMIT 1",
                 (link_url,)
             )
 
             if cur.fetchone():
+                print("ALREADY EXISTS:", title)
                 continue
 
             img_url = (
@@ -97,17 +111,10 @@ def check_updates():
                 or img.get("src")
             )
 
-            if not img_url:
-                img_url = "https://via.placeholder.com/500x750.jpg"
+            print("NEW CONTENT:", title)
 
-            print(f"✅ جديد: {title}")
+            caption = f"📺 {title}\n\n🔥 تمت إضافته حديثاً"
 
-            caption = f"""📺 {title}
-
-🔥 تمت إضافته حديثاً على TukTukHD
-"""
-
-            # إرسال الإشعار للمستخدمين
             for user in users:
                 try:
                     send_image_message(
@@ -117,16 +124,15 @@ def check_updates():
                     )
                 except Exception as send_error:
                     print(
-                        f"خطأ إرسال إلى {user['phone']}: {send_error}"
+                        f"SEND ERROR {user['phone']}: {send_error}"
                     )
 
-            # حفظ الرابط لمنع التكرار
             cur.execute(
                 """
                 INSERT INTO messages
-                (phone, message, sender, msg_time)
+                (phone,message,sender,msg_time)
                 VALUES
-                ('system', %s, 'system', %s)
+                ('system',%s,'system',%s)
                 """,
                 (
                     link_url,
@@ -135,12 +141,18 @@ def check_updates():
             )
 
             conn.commit()
+            new_count += 1
+
+        print("TOTAL IMAGES FOUND:", found_count)
+        print("TOTAL NEW ITEMS:", new_count)
 
         cur.close()
         conn.close()
 
+        print("===== CHECK UPDATES FINISHED =====")
+
     except Exception as e:
-        print(f"❌ خطأ أثناء الفحص: {e}")
+        print(f"CHECK_UPDATES_ERROR: {e}")
                 
 @app.route("/")
 def home(): return render_template("chat.html")
