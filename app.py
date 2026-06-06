@@ -98,35 +98,34 @@ def check_updates():
         # استخدام res.text بعد ضبط الترميز الصحيح
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # استخراج أول 5 عناصر فقط
+       # استخرج كل الروابط بدون تقييد (عشان ما يفوته أي رابط جديد)
         items = soup.find_all("a")
-        count = 0
+        count = 0 
         
         for item in items:
-            if count >= 5: break # إيقاف بعد الوصول لـ 5
+            # إذا أرسلنا 5 بالفعل في هذه الدورة، توقف
+            if count >= 5: break 
             
             img = item.find("img")
             if img:
-                # استخدام .get() مع التأكد من معالجة النصوص بشكل صحيح
-                raw_title = item.get("title") or (img.get("alt") if img else "جديد")
-                # تنظيف النص إذا لزم الأمر
-                title = raw_title.strip()
-                
                 link_url = item.get("href")
-                img_url = img.get("data-src") or img.get("src")
                 
+                # فحص القاعدة
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
+                
+                # إذا لم يكن موجوداً، أرسل
                 if not cur.fetchone():
-                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                    title = (item.get("title") or img.get("alt") or "جديد").strip()
+                    img_url = img.get("data-src") or img.get("src")
+                    msg = f"📺 *{title}*\n🔥 متاح الآن في الاستراحة!"
                     
-                    # إرسال الرسالة
                     for u in users:
                         send_image_message(u[0], img_url, msg)
                     
                     cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
                                 (link_url, datetime.now().strftime("%H:%M")))
                     conn.commit()
-                    count += 1
+                    count += 1 # زيادة العداد بعد الإرسال الناجح فقط
         
         cur.close(); conn.close()
         print(f"===== تم الانتهاء: تم إرسال {count} تحديث =====")
