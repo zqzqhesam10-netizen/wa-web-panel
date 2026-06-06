@@ -100,31 +100,33 @@ def check_updates():
 
         # استخراج أول 5 عناصر فقط
         items = soup.find_all("a")[:5]
-        count = 0  # عداد للإرسالات الجديدة فقط
+        count = 0
         
         for item in items:
+            if count >= 5: break # إيقاف بعد الوصول لـ 5
+            
             img = item.find("img")
             if img:
+                # استخدام .get() مع التأكد من معالجة النصوص بشكل صحيح
+                raw_title = item.get("title") or (img.get("alt") if img else "جديد")
+                # تنظيف النص إذا لزم الأمر
+                title = raw_title.strip()
+                
                 link_url = item.get("href")
+                img_url = img.get("data-src") or img.get("src")
                 
-                # التحقق من قاعدة البيانات
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
-                
-                # إذا لم يكن الرابط موجوداً (إرسال جديد)
                 if not cur.fetchone():
-                    title = (item.get("title") or img.get("alt") or "جديد").strip()
-                    img_url = img.get("data-src") or img.get("src")
-                    msg = f"📺 *{title}*\n🔥 متاح الآن في الاستراحة!"
+                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
                     
-                    # الإرسال لجميع المستخدمين
+                    # إرسال الرسالة
                     for u in users:
                         send_image_message(u[0], img_url, msg)
                     
-                    # تسجيل الرابط لمنع التكرار
                     cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
                                 (link_url, datetime.now().strftime("%H:%M")))
                     conn.commit()
-                    count += 1 # زيادة العداد فقط عند الإرسال الفعلي
+                    count += 1
         
         cur.close(); conn.close()
         print(f"===== تم الانتهاء: تم إرسال {count} تحديث =====")
