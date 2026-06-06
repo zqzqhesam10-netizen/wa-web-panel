@@ -99,7 +99,7 @@ def check_updates():
         soup = BeautifulSoup(res.text, 'html.parser')
 
         # استخراج أول 5 عناصر فقط
-        items = soup.find_all("a")[:5]
+        items = soup.find_all("a")
         count = 0
         
         for item in items:
