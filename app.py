@@ -91,45 +91,36 @@ def check_updates():
         scraper = cloudscraper.create_scraper()
         url = "https://tuktukhd.com/recent/"
         res = scraper.get(url, timeout=30)
+        res.encoding = 'utf-8' # ترميز عربي سليم
         
-        # التعديل هنا: إجبار الـ Encoding على UTF-8
-        res.encoding = 'utf-8'
-        
-        # استخدام res.text بعد ضبط الترميز الصحيح
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # استخراج أول 5 عناصر فقط
-        items = soup.find_all("a")
-        count = 0
+        # الفلتر الذكي: نأخذ أول 5 عناصر فقط من الصفحة
+        items = soup.find_all("a")[:5]
         
         for item in items:
-            if count >= 5: break # إيقاف بعد الوصول لـ 5
-            
             img = item.find("img")
             if img:
-                # استخدام .get() مع التأكد من معالجة النصوص بشكل صحيح
-                raw_title = item.get("title") or (img.get("alt") if img else "جديد")
-                # تنظيف النص إذا لزم الأمر
-                title = raw_title.strip()
-                
+                title = (item.get("title") or (img.get("alt") if img else "جديد")).strip()
                 link_url = item.get("href")
                 img_url = img.get("data-src") or img.get("src")
                 
+                # فحص منع التكرار: هل هذا الرابط موجود مسبقاً؟
                 cur.execute("SELECT id FROM messages WHERE message = %s LIMIT 1", (link_url,))
                 if not cur.fetchone():
-                    msg = f"📺 {title}\n🔥 متاح الآن في الاستراحة!"
+                    msg = f"📺 *{title}*\n🔥 متاح الآن في الاستراحة!"
                     
-                    # إرسال الرسالة
+                    # الإرسال
                     for u in users:
                         send_image_message(u[0], img_url, msg)
                     
+                    # تسجيل الرابط الجديد
                     cur.execute("INSERT INTO messages(phone, message, sender, msg_time) VALUES('system', %s, 'system', %s)", 
                                 (link_url, datetime.now().strftime("%H:%M")))
                     conn.commit()
-                    count += 1
         
         cur.close(); conn.close()
-        print(f"===== تم الانتهاء: تم إرسال {count} تحديث =====")
+        print("===== تم الانتهاء من الفحص بنجاح =====")
     except Exception as e:
         print(f"DEBUG: خطأ في الفحص: {e}")
                 
